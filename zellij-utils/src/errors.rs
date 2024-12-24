@@ -291,6 +291,8 @@ pub enum ScreenContext {
     GoToTabName,
     UpdateTabName,
     UndoRenameTab,
+    MoveTabLeft,
+    MoveTabRight,
     TerminalResize,
     TerminalPixelDimensions,
     TerminalBackgroundColor,
@@ -349,6 +351,30 @@ pub enum ScreenContext {
     NewInPlacePluginPane,
     DumpLayoutToHd,
     RenameSession,
+    DumpLayoutToPlugin,
+    ListClientsMetadata,
+    Reconfigure,
+    RerunCommandPane,
+    ResizePaneWithId,
+    EditScrollbackForPaneWithId,
+    WriteToPaneId,
+    MovePaneWithPaneId,
+    MovePaneWithPaneIdInDirection,
+    ClearScreenForPaneId,
+    ScrollUpInPaneId,
+    ScrollDownInPaneId,
+    ScrollToTopInPaneId,
+    ScrollToBottomInPaneId,
+    PageScrollUpInPaneId,
+    PageScrollDownInPaneId,
+    TogglePaneIdFullscreen,
+    TogglePaneEmbedOrEjectForPaneId,
+    CloseTabWithIndex,
+    BreakPanesToNewTab,
+    BreakPanesToTabWithIndex,
+    ListClientsToPlugin,
+    TogglePanePinned,
+    SetFloatingPanePinned,
 }
 
 /// Stack call representations corresponding to the different types of [`PtyInstruction`]s.
@@ -369,6 +395,10 @@ pub enum PtyContext {
     DumpLayout,
     LogLayoutToHd,
     FillPluginCwd,
+    DumpLayoutToPlugin,
+    ListClientsMetadata,
+    Reconfigure,
+    ListClientsToPlugin,
     Exit,
 }
 
@@ -376,10 +406,12 @@ pub enum PtyContext {
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum PluginContext {
     Load,
+    LoadBackgroundPlugin,
     Update,
     Render,
     Unload,
     Reload,
+    ReloadPluginWithId,
     Resize,
     Exit,
     AddClient,
@@ -393,6 +425,19 @@ pub enum PluginContext {
     PermissionRequestResult,
     DumpLayout,
     LogLayoutToHd,
+    CliPipe,
+    Message,
+    CachePluginEvents,
+    MessageFromPlugin,
+    UnblockCliPipes,
+    WatchFilesystem,
+    KeybindPipe,
+    DumpLayoutToPlugin,
+    ListClientsMetadata,
+    Reconfigure,
+    FailedToWriteConfigToDisk,
+    ListClientsToPlugin,
+    ChangePluginHostDir,
 }
 
 /// Stack call representations corresponding to the different types of [`ClientInstruction`]s.
@@ -413,6 +458,10 @@ pub enum ClientContext {
     DoneParsingStdinQuery,
     SwitchSession,
     SetSynchronisedOutput,
+    UnblockCliPipeInput,
+    CliPipeOutput,
+    QueryTerminalSize,
+    WriteConfigToDisk,
 }
 
 /// Stack call representations corresponding to the different types of [`ServerInstruction`]s.
@@ -430,7 +479,18 @@ pub enum ServerContext {
     ConnStatus,
     ActiveClients,
     Log,
+    LogError,
     SwitchSession,
+    UnblockCliPipeInput,
+    CliPipeOutput,
+    AssociatePipeWithClient,
+    DisconnectAllClientsExcept,
+    ChangeMode,
+    ChangeModeForAllClients,
+    Reconfigure,
+    ConfigWrittenToDisk,
+    FailedToWriteConfigToDisk,
+    RebindKeys,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
@@ -452,6 +512,7 @@ pub enum BackgroundJobContext {
     ReportLayoutInfo,
     RunCommand,
     WebRequest,
+    ReportPluginList,
     Exit,
 }
 

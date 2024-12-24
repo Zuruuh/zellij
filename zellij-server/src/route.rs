@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::collections::{BTreeMap, HashSet, VecDeque};
 use std::sync::{Arc, RwLock};
 
 use crate::thread_bus::ThreadSenders;
@@ -10,14 +10,18 @@ use crate::{
     screen::ScreenInstruction,
     ServerInstruction, SessionMetaData, SessionState,
 };
+use std::thread;
+use std::time::Duration;
+use uuid::Uuid;
 use zellij_utils::{
     channels::SenderWithContext,
-    data::{Direction, Event, PluginCapabilities, ResizeStrategy},
+    data::{Direction, Event, InputMode, PluginCapabilities, ResizeStrategy},
     errors::prelude::*,
     input::{
         actions::{Action, SearchDirection, SearchOption},
         command::TerminalAction,
         get_mode_info,
+        keybinds::Keybinds,
         layout::Layout,
     },
     ipc::{
@@ -36,6 +40,9 @@ pub(crate) fn route_action(
     client_attributes: ClientAttributes,
     default_shell: Option<TerminalAction>,
     default_layout: Box<Layout>,
+    mut seen_cli_pipes: Option<&mut HashSet<String>>,
+    client_keybinds: Keybinds,
+    default_mode: InputMode,
 ) -> Result<bool> {
     let mut should_break = false;
     let err_context = || format!("failed to route action for client {client_id}");
@@ -62,12 +69,17 @@ pub(crate) fn route_action(
                 .send_to_screen(ScreenInstruction::ToggleTab(client_id))
                 .with_context(err_context)?;
         },
-        Action::Write(val) => {
+        Action::Write(key_with_modifier, raw_bytes, is_kitty_keyboard_protocol) => {
             senders
                 .send_to_screen(ScreenInstruction::ClearScroll(client_id))
                 .with_context(err_context)?;
             senders
-                .send_to_screen(ScreenInstruction::WriteCharacter(val, client_id))
+                .send_to_screen(ScreenInstruction::WriteCharacter(
+                    key_with_modifier,
+                    raw_bytes,
+                    is_kitty_keyboard_protocol,
+                    client_id,
+                ))
                 .with_context(err_context)?;
         },
         Action::WriteChars(val) => {
@@ -76,25 +88,25 @@ pub(crate) fn route_action(
                 .with_context(err_context)?;
             let val = val.into_bytes();
             senders
-                .send_to_screen(ScreenInstruction::WriteCharacter(val, client_id))
+                .send_to_screen(ScreenInstruction::WriteCharacter(
+                    None, val, false, client_id,
+                ))
                 .with_context(err_context)?;
         },
         Action::SwitchToMode(mode) => {
             let attrs = &client_attributes;
-            // TODO: use the palette from the client and remove it from the server os api
-            // this is left here as a stop gap measure until we shift some code around
-            // to allow for this
-            // TODO: Need access to `ClientAttributes` here
             senders
-                .send_to_plugin(PluginInstruction::Update(vec![(
-                    None,
-                    Some(client_id),
-                    Event::ModeUpdate(get_mode_info(mode, attrs, capabilities)),
-                )]))
+                .send_to_server(ServerInstruction::ChangeMode(client_id, mode))
                 .with_context(err_context)?;
             senders
                 .send_to_screen(ScreenInstruction::ChangeMode(
-                    get_mode_info(mode, attrs, capabilities),
+                    get_mode_info(
+                        mode,
+                        attrs,
+                        capabilities,
+                        &client_keybinds,
+                        Some(default_mode),
+                    ),
                     client_id,
                 ))
                 .with_context(err_context)?;
@@ -247,7 +259,7 @@ pub(crate) fn route_action(
                 .send_to_screen(ScreenInstruction::TogglePaneFrames)
                 .with_context(err_context)?;
         },
-        Action::NewPane(direction, name) => {
+        Action::NewPane(direction, name, start_suppressed) => {
             let shell = default_shell.clone();
             let pty_instr = match direction {
                 Some(Direction::Left) => {
@@ -267,21 +279,23 @@ pub(crate) fn route_action(
                     shell,
                     None,
                     name,
+                    None,
+                    start_suppressed,
                     ClientTabIndexOrPaneId::ClientId(client_id),
                 ),
             };
             senders.send_to_pty(pty_instr).with_context(err_context)?;
         },
         Action::EditFile(
-            path_to_file,
-            line_number,
-            cwd,
+            open_file_payload,
             split_direction,
             should_float,
             should_open_in_place,
+            start_suppressed,
+            floating_pane_coordinates,
         ) => {
-            let title = format!("Editing: {}", path_to_file.display());
-            let open_file = TerminalAction::OpenFile(path_to_file, line_number, cwd);
+            let title = format!("Editing: {}", open_file_payload.path.display());
+            let open_file = TerminalAction::OpenFile(open_file_payload);
             let pty_instr = match (split_direction, should_float, should_open_in_place) {
                 (Some(Direction::Left), false, false) => {
                     PtyInstruction::SpawnTerminalVertically(Some(open_file), Some(title), client_id)
@@ -318,6 +332,8 @@ pub(crate) fn route_action(
                     Some(open_file),
                     Some(should_float),
                     Some(title),
+                    floating_pane_coordinates,
+                    start_suppressed,
                     ClientTabIndexOrPaneId::ClientId(client_id),
                 ),
             };
@@ -329,18 +345,31 @@ pub(crate) fn route_action(
                 .send_to_plugin(PluginInstruction::Update(vec![(
                     None,
                     None,
-                    Event::ModeUpdate(get_mode_info(input_mode, attrs, capabilities)),
+                    Event::ModeUpdate(get_mode_info(
+                        input_mode,
+                        attrs,
+                        capabilities,
+                        &client_keybinds,
+                        Some(default_mode),
+                    )),
                 )]))
                 .with_context(err_context)?;
+
+            senders
+                .send_to_server(ServerInstruction::ChangeModeForAllClients(input_mode))
+                .with_context(err_context)?;
+
             senders
                 .send_to_screen(ScreenInstruction::ChangeModeForAllClients(get_mode_info(
                     input_mode,
                     attrs,
                     capabilities,
+                    &client_keybinds,
+                    Some(default_mode),
                 )))
                 .with_context(err_context)?;
         },
-        Action::NewFloatingPane(run_command, name) => {
+        Action::NewFloatingPane(run_command, name, floating_pane_coordinates) => {
             let should_float = true;
             let run_cmd = run_command
                 .map(|cmd| TerminalAction::RunCommand(cmd.into()))
@@ -350,6 +379,8 @@ pub(crate) fn route_action(
                     run_cmd,
                     Some(should_float),
                     name,
+                    floating_pane_coordinates,
+                    false,
                     ClientTabIndexOrPaneId::ClientId(client_id),
                 ))
                 .with_context(err_context)?;
@@ -402,6 +433,8 @@ pub(crate) fn route_action(
                     run_cmd,
                     Some(should_float),
                     name,
+                    None,
+                    false,
                     ClientTabIndexOrPaneId::ClientId(client_id),
                 ),
             };
@@ -450,6 +483,8 @@ pub(crate) fn route_action(
                     run_cmd,
                     None,
                     None,
+                    None,
+                    false,
                     ClientTabIndexOrPaneId::ClientId(client_id),
                 ),
             };
@@ -466,6 +501,7 @@ pub(crate) fn route_action(
             swap_tiled_layouts,
             swap_floating_layouts,
             tab_name,
+            should_change_focus_to_new_tab,
         ) => {
             let shell = default_shell.clone();
             let swap_tiled_layouts =
@@ -480,6 +516,7 @@ pub(crate) fn route_action(
                     floating_panes_layout,
                     tab_name,
                     (swap_tiled_layouts, swap_floating_layouts),
+                    should_change_focus_to_new_tab,
                     client_id,
                 ))
                 .with_context(err_context)?;
@@ -531,6 +568,16 @@ pub(crate) fn route_action(
         Action::UndoRenameTab => {
             senders
                 .send_to_screen(ScreenInstruction::UndoRenameTab(client_id))
+                .with_context(err_context)?;
+        },
+        Action::MoveTab(direction) => {
+            let screen_instr = match direction {
+                Direction::Left => ScreenInstruction::MoveTabLeft(client_id),
+                Direction::Right => ScreenInstruction::MoveTabRight(client_id),
+                _ => return Ok(false),
+            };
+            senders
+                .send_to_screen(screen_instr)
                 .with_context(err_context)?;
         },
         Action::Quit => {
@@ -658,25 +705,36 @@ pub(crate) fn route_action(
                 .send_to_screen(ScreenInstruction::QueryTabNames(client_id))
                 .with_context(err_context)?;
         },
-        Action::NewTiledPluginPane(run_plugin, name) => {
+        Action::NewTiledPluginPane(run_plugin, name, skip_cache, cwd) => {
             senders
                 .send_to_screen(ScreenInstruction::NewTiledPluginPane(
-                    run_plugin, name, client_id,
+                    run_plugin, name, skip_cache, cwd, client_id,
                 ))
                 .with_context(err_context)?;
         },
-        Action::NewFloatingPluginPane(run_plugin, name) => {
+        Action::NewFloatingPluginPane(
+            run_plugin,
+            name,
+            skip_cache,
+            cwd,
+            floating_pane_coordinates,
+        ) => {
             senders
                 .send_to_screen(ScreenInstruction::NewFloatingPluginPane(
-                    run_plugin, name, client_id,
+                    run_plugin,
+                    name,
+                    skip_cache,
+                    cwd,
+                    floating_pane_coordinates,
+                    client_id,
                 ))
                 .with_context(err_context)?;
         },
-        Action::NewInPlacePluginPane(run_plugin, name) => {
+        Action::NewInPlacePluginPane(run_plugin, name, skip_cache) => {
             if let Some(pane_id) = pane_id {
                 senders
                     .send_to_screen(ScreenInstruction::NewInPlacePluginPane(
-                        run_plugin, name, pane_id, client_id,
+                        run_plugin, name, pane_id, skip_cache, client_id,
                     ))
                     .with_context(err_context)?;
             } else {
@@ -693,6 +751,7 @@ pub(crate) fn route_action(
             should_float,
             move_to_focused_tab,
             should_open_in_place,
+            skip_cache,
         ) => {
             senders
                 .send_to_screen(ScreenInstruction::LaunchOrFocusPlugin(
@@ -701,17 +760,20 @@ pub(crate) fn route_action(
                     move_to_focused_tab,
                     should_open_in_place,
                     pane_id,
+                    skip_cache,
                     client_id,
                 ))
                 .with_context(err_context)?;
         },
-        Action::LaunchPlugin(run_plugin, should_float, should_open_in_place) => {
+        Action::LaunchPlugin(run_plugin, should_float, should_open_in_place, skip_cache, cwd) => {
             senders
                 .send_to_screen(ScreenInstruction::LaunchPlugin(
                     run_plugin,
                     should_float,
                     should_open_in_place,
                     pane_id,
+                    skip_cache,
+                    cwd,
                     client_id,
                 ))
                 .with_context(err_context)?;
@@ -800,6 +862,118 @@ pub(crate) fn route_action(
                 .send_to_screen(ScreenInstruction::RenameSession(name, client_id))
                 .with_context(err_context)?;
         },
+        Action::CliPipe {
+            pipe_id,
+            mut name,
+            payload,
+            plugin,
+            args,
+            configuration,
+            floating,
+            in_place,
+            skip_cache,
+            cwd,
+            pane_title,
+            ..
+        } => {
+            if let Some(seen_cli_pipes) = seen_cli_pipes.as_mut() {
+                if !seen_cli_pipes.contains(&pipe_id) {
+                    seen_cli_pipes.insert(pipe_id.clone());
+                    senders
+                        .send_to_server(ServerInstruction::AssociatePipeWithClient {
+                            pipe_id: pipe_id.clone(),
+                            client_id,
+                        })
+                        .with_context(err_context)?;
+                }
+            }
+            if let Some(name) = name.take() {
+                let should_open_in_place = in_place.unwrap_or(false);
+                if should_open_in_place && pane_id.is_none() {
+                    log::error!("Was asked to open a new plugin in-place, but cannot identify the pane id... is the ZELLIJ_PANE_ID variable set?");
+                }
+                let pane_id_to_replace = if should_open_in_place { pane_id } else { None };
+                senders
+                    .send_to_plugin(PluginInstruction::CliPipe {
+                        pipe_id,
+                        name,
+                        payload,
+                        plugin,
+                        args,
+                        configuration,
+                        floating,
+                        pane_id_to_replace,
+                        cwd,
+                        pane_title,
+                        skip_cache,
+                        cli_client_id: client_id,
+                    })
+                    .with_context(err_context)?;
+            } else {
+                log::error!("Message must have a name");
+            }
+        },
+        Action::KeybindPipe {
+            mut name,
+            payload,
+            plugin,
+            args,
+            mut configuration,
+            floating,
+            in_place,
+            skip_cache,
+            cwd,
+            pane_title,
+            launch_new,
+            plugin_id,
+            ..
+        } => {
+            if let Some(name) = name.take() {
+                let should_open_in_place = in_place.unwrap_or(false);
+                let pane_id_to_replace = if should_open_in_place { pane_id } else { None };
+                if launch_new && plugin_id.is_none() {
+                    // we do this to make sure the plugin is unique (has a unique configuration parameter)
+                    configuration
+                        .get_or_insert_with(BTreeMap::new)
+                        .insert("_zellij_id".to_owned(), Uuid::new_v4().to_string());
+                }
+                senders
+                    .send_to_plugin(PluginInstruction::KeybindPipe {
+                        name,
+                        payload,
+                        plugin,
+                        args,
+                        configuration,
+                        floating,
+                        pane_id_to_replace,
+                        cwd,
+                        pane_title,
+                        skip_cache,
+                        cli_client_id: client_id,
+                        plugin_and_client_id: plugin_id.map(|plugin_id| (plugin_id, client_id)),
+                    })
+                    .with_context(err_context)?;
+            } else {
+                log::error!("Message must have a name");
+            }
+        },
+        Action::ListClients => {
+            let default_shell = match default_shell {
+                Some(TerminalAction::RunCommand(run_command)) => Some(run_command.command),
+                _ => None,
+            };
+            senders
+                .send_to_screen(ScreenInstruction::ListClientsMetadata(
+                    default_shell,
+                    client_id,
+                ))
+                .with_context(err_context)?;
+        },
+        Action::TogglePanePinned => {
+            senders
+                .send_to_screen(ScreenInstruction::TogglePanePinned(client_id))
+                .with_context(err_context)?;
+        },
     }
     Ok(should_break)
 }
@@ -830,6 +1004,7 @@ pub(crate) fn route_thread_main(
 ) -> Result<()> {
     let mut retry_queue = VecDeque::new();
     let err_context = || format!("failed to handle instruction for client {client_id}");
+    let mut seen_cli_pipes = HashSet::new();
     'route_loop: loop {
         match receiver.recv() {
             Some((instruction, err_ctx)) => {
@@ -837,28 +1012,61 @@ pub(crate) fn route_thread_main(
                 log::debug!("Received message {}", instruction);
                 let rlocked_sessions = session_data.read().to_anyhow().with_context(err_context)?;
                 log::debug!("Session obtained");
-                let handle_instruction = |instruction: ClientToServerMsg,
-                                          mut retry_queue: Option<
+                let mut handle_instruction = |instruction: ClientToServerMsg,
+                                              mut retry_queue: Option<
                     &mut VecDeque<ClientToServerMsg>,
                 >|
                  -> Result<bool> {
                     log::debug!("Processing message {}", instruction);
                     let mut should_break = false;
+                    let rlocked_sessions =
+                        session_data.read().to_anyhow().with_context(err_context)?;
                     match instruction {
+                        ClientToServerMsg::Key(key, raw_bytes, is_kitty_keyboard_protocol) => {
+                            if let Some(rlocked_sessions) = rlocked_sessions.as_ref() {
+                                match rlocked_sessions.get_client_keybinds_and_mode(&client_id) {
+                                    Some((keybinds, input_mode, default_input_mode)) => {
+                                        for action in keybinds
+                                            .get_actions_for_key_in_mode_or_default_action(
+                                                &input_mode,
+                                                &key,
+                                                raw_bytes,
+                                                default_input_mode,
+                                                is_kitty_keyboard_protocol,
+                                            )
+                                        {
+                                            if route_action(
+                                                action,
+                                                client_id,
+                                                None,
+                                                rlocked_sessions.senders.clone(),
+                                                rlocked_sessions.capabilities.clone(),
+                                                rlocked_sessions.client_attributes.clone(),
+                                                rlocked_sessions.default_shell.clone(),
+                                                rlocked_sessions.layout.clone(),
+                                                Some(&mut seen_cli_pipes),
+                                                keybinds.clone(),
+                                                rlocked_sessions
+                                                    .session_configuration
+                                                    .get_client_configuration(&client_id)
+                                                    .options
+                                                    .default_mode
+                                                    .unwrap_or(InputMode::Normal)
+                                                    .clone(),
+                                            )? {
+                                                should_break = true;
+                                            }
+                                        }
+                                    },
+                                    None => {
+                                        log::error!("Failed to get keybindings for client");
+                                    },
+                                }
+                            }
+                        },
                         ClientToServerMsg::Action(action, maybe_pane_id, maybe_client_id) => {
                             let client_id = maybe_client_id.unwrap_or(client_id);
                             if let Some(rlocked_sessions) = rlocked_sessions.as_ref() {
-                                if let Action::SwitchToMode(input_mode) = action {
-                                    let send_res = os_input.send_to_client(
-                                        client_id,
-                                        ServerToClientMsg::SwitchToMode(input_mode),
-                                    );
-                                    if send_res.is_err() {
-                                        let _ = to_server
-                                            .send(ServerInstruction::RemoveClient(client_id));
-                                        return Ok(true);
-                                    }
-                                }
                                 if route_action(
                                     action,
                                     client_id,
@@ -868,6 +1076,18 @@ pub(crate) fn route_thread_main(
                                     rlocked_sessions.client_attributes.clone(),
                                     rlocked_sessions.default_shell.clone(),
                                     rlocked_sessions.layout.clone(),
+                                    Some(&mut seen_cli_pipes),
+                                    rlocked_sessions
+                                        .session_configuration
+                                        .get_client_keybinds(&client_id)
+                                        .clone(),
+                                    rlocked_sessions
+                                        .session_configuration
+                                        .get_client_configuration(&client_id)
+                                        .options
+                                        .default_mode
+                                        .unwrap_or(InputMode::Normal)
+                                        .clone(),
                                 )? {
                                     should_break = true;
                                 }
@@ -940,17 +1160,21 @@ pub(crate) fn route_thread_main(
                         ClientToServerMsg::NewClient(
                             client_attributes,
                             cli_args,
-                            opts,
+                            config,
+                            runtime_config_options,
                             layout,
-                            plugin_config,
+                            plugin_aliases,
+                            should_launch_setup_wizard,
                         ) => {
                             let new_client_instruction = ServerInstruction::NewClient(
                                 client_attributes,
                                 cli_args,
-                                opts,
+                                config,
+                                runtime_config_options,
                                 layout,
+                                plugin_aliases,
+                                should_launch_setup_wizard,
                                 client_id,
-                                plugin_config,
                             );
                             to_server
                                 .send(new_client_instruction)
@@ -958,13 +1182,15 @@ pub(crate) fn route_thread_main(
                         },
                         ClientToServerMsg::AttachClient(
                             client_attributes,
-                            opts,
+                            config,
+                            runtime_config_options,
                             tab_position_to_focus,
                             pane_id_to_focus,
                         ) => {
                             let attach_client_instruction = ServerInstruction::AttachClient(
                                 client_attributes,
-                                opts,
+                                config,
+                                runtime_config_options,
                                 tab_position_to_focus,
                                 pane_id_to_focus,
                                 client_id,
@@ -995,16 +1221,31 @@ pub(crate) fn route_thread_main(
                         ClientToServerMsg::ListClients => {
                             let _ = to_server.send(ServerInstruction::ActiveClients(client_id));
                         },
+                        ClientToServerMsg::ConfigWrittenToDisk(config) => {
+                            let _ = to_server
+                                .send(ServerInstruction::ConfigWrittenToDisk(client_id, config));
+                        },
+                        ClientToServerMsg::FailedToWriteConfigToDisk(failed_path) => {
+                            let _ = to_server.send(ServerInstruction::FailedToWriteConfigToDisk(
+                                client_id,
+                                failed_path,
+                            ));
+                        },
                     }
                     Ok(should_break)
                 };
+                let mut repeat_retries = VecDeque::new();
                 while let Some(instruction_to_retry) = retry_queue.pop_front() {
                     log::warn!("Server ready, retrying sending instruction.");
-                    let should_break = handle_instruction(instruction_to_retry, None)?;
+                    thread::sleep(Duration::from_millis(5));
+                    let should_break =
+                        handle_instruction(instruction_to_retry, Some(&mut repeat_retries))?;
                     if should_break {
                         break 'route_loop;
                     }
                 }
+                // retry on loop around
+                retry_queue.append(&mut repeat_retries);
                 let should_break = handle_instruction(instruction, Some(&mut retry_queue))?;
                 if should_break {
                     break 'route_loop;

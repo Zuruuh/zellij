@@ -247,7 +247,7 @@ fn handle_openpty(
 fn handle_terminal(
     cmd: RunCommand,
     failover_cmd: Option<RunCommand>,
-    orig_termios: termios::Termios,
+    orig_termios: Option<termios::Termios>,
     quit_cb: Box<dyn Fn(PaneId, Option<i32>, RunCommand) + Send>,
     terminal_id: u32,
 ) -> Result<(RawFd, RawFd)> {
@@ -255,7 +255,7 @@ fn handle_terminal(
 
     // Create a pipe to allow the child the communicate the shell's pid to its
     // parent.
-    match openpty(None, Some(&orig_termios)) {
+    match openpty(None, &orig_termios) {
         Ok(open_pty_res) => handle_openpty(open_pty_res, cmd, quit_cb, terminal_id),
         Err(e) => match failover_cmd {
             Some(failover_cmd) => {
@@ -355,7 +355,7 @@ type SpawnTerminalReturn = Arc<RwLock<PTY>>;
 
 fn spawn_terminal(
     terminal_action: TerminalAction,
-    #[cfg(unix)] orig_termios: termios::Termios,
+    #[cfg(unix)] orig_termios: Option<termios::Termios>,
     quit_cb: Box<dyn Fn(PaneId, Option<i32>, RunCommand) + Send>, // u32 is the exit_status
     default_editor: Option<PathBuf>,
     terminal_id: u32,
@@ -364,10 +364,10 @@ fn spawn_terminal(
     // secondary fd
     let mut failover_cmd_args = None;
     let cmd = match terminal_action {
-        TerminalAction::OpenFile(mut file_to_open, line_number, cwd) => {
-            if file_to_open.is_relative() {
-                if let Some(cwd) = cwd.as_ref() {
-                    file_to_open = cwd.join(file_to_open);
+        TerminalAction::OpenFile(mut payload) => {
+            if payload.path.is_relative() {
+                if let Some(cwd) = payload.cwd.as_ref() {
+                    payload.path = cwd.join(payload.path);
                 }
             }
             let mut command = default_editor.unwrap_or_else(|| {
@@ -382,11 +382,12 @@ fn spawn_terminal(
             if !command.is_dir() {
                 separate_command_arguments(&mut command, &mut args);
             }
-            let file_to_open = file_to_open
+            let file_to_open = payload
+                .path
                 .into_os_string()
                 .into_string()
                 .expect("Not valid Utf8 Encoding");
-            if let Some(line_number) = line_number {
+            if let Some(line_number) = payload.line_number {
                 if command.ends_with("vim")
                     || command.ends_with("nvim")
                     || command.ends_with("emacs")
@@ -410,9 +411,10 @@ fn spawn_terminal(
             RunCommand {
                 command,
                 args,
-                cwd,
+                cwd: payload.cwd,
                 hold_on_close: false,
                 hold_on_start: false,
+                ..Default::default()
             }
         },
         TerminalAction::RunCommand(command) => command,
@@ -594,7 +596,7 @@ type TerminalReference = WinPtyReference;
 #[derive(Clone)]
 pub struct ServerOsInputOutput {
     #[cfg(unix)]
-    orig_termios: Arc<Mutex<termios::Termios>>,
+    orig_termios: Arc<Mutex<Option<termios::Termios>>>,
     client_senders: Arc<Mutex<HashMap<ClientId, ClientSender>>>,
     terminal_id_to_reference: Arc<Mutex<BTreeMap<u32, Option<TerminalReference>>>>, // A value of None means the
     // terminal_id exists but is
@@ -620,7 +622,7 @@ struct RawFdAsyncReader {
 impl RawFdAsyncReader {
     fn new(fd: RawFd) -> RawFdAsyncReader {
         RawFdAsyncReader {
-            /// The supplied `RawFd` is consumed by the created `RawFdAsyncReader`, closing it when dropped
+            // The supplied `RawFd` is consumed by the created `RawFdAsyncReader`, closing it when dropped
             fd: unsafe { AsyncFile::from_raw_fd(fd) },
         }
     }
@@ -849,18 +851,17 @@ impl ServerOsApi for ServerOsInputOutput {
             .to_anyhow()
             .with_context(err_context)?;
 
-        let mut terminal_id = None;
-        {
-            let current_ids: BTreeSet<u32> = self
-                .terminal_id_to_reference
-                .lock()
-                .to_anyhow()
-                .with_context(err_context)?
-                .keys()
-                .copied()
-                .collect();
-            terminal_id = current_ids.last().map(|l| l + 1).or(Some(0));
-        }
+        let terminal_id = self
+            .terminal_id_to_reference
+            .lock()
+            .to_anyhow()
+            .with_context(err_context)?
+            .keys()
+            .copied()
+            .collect::<BTreeSet<u32>>()
+            .last()
+            .map(|l| l + 1)
+            .or(Some(0));
 
         match terminal_id {
             Some(terminal_id) => {
@@ -909,18 +910,17 @@ impl ServerOsApi for ServerOsInputOutput {
     fn reserve_terminal_id(&self) -> Result<u32> {
         let err_context = || "failed to reserve a terminal ID".to_string();
 
-        let mut terminal_id = None;
-        {
-            let current_ids: BTreeSet<u32> = self
-                .terminal_id_to_reference
-                .lock()
-                .to_anyhow()
-                .with_context(err_context)?
-                .keys()
-                .copied()
-                .collect();
-            terminal_id = current_ids.last().map(|l| l + 1).or(Some(0));
-        }
+        let terminal_id = self
+            .terminal_id_to_reference
+            .lock()
+            .to_anyhow()
+            .with_context(err_context)?
+            .keys()
+            .copied()
+            .collect::<BTreeSet<u32>>()
+            .last()
+            .map(|l| l + 1)
+            .or(Some(0));
         match terminal_id {
             Some(terminal_id) => {
                 self.terminal_id_to_reference
@@ -1121,7 +1121,7 @@ impl ServerOsApi for ServerOsInputOutput {
         let mut system_info = System::new();
         // Update by minimizing information.
         // See https://docs.rs/sysinfo/0.22.5/sysinfo/struct.ProcessRefreshKind.html#
-        system_info.refresh_processes_specifics(ProcessRefreshKind::default());
+        system_info.refresh_process_specifics(pid.into(), ProcessRefreshKind::default());
 
         if let Some(process) = system_info.process(pid.into()) {
             let cwd = process.cwd();
@@ -1260,7 +1260,10 @@ impl Clone for Box<dyn ServerOsApi> {
 
 #[cfg(unix)]
 pub fn get_server_os_input() -> Result<ServerOsInputOutput, nix::Error> {
-    let current_termios = termios::tcgetattr(0)?;
+    let current_termios = termios::tcgetattr(0).ok();
+    if current_termios.is_none() {
+        log::warn!("Starting a server without a controlling terminal, using the default termios configuration.");
+    }
     let orig_termios = Arc::new(Mutex::new(current_termios));
     Ok(ServerOsInputOutput {
         orig_termios,

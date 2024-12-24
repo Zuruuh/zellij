@@ -5,7 +5,7 @@ pub struct PluginCommand {
     pub name: i32,
     #[prost(
         oneof = "plugin_command::Payload",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 88, 89, 90"
     )]
     pub payload: ::core::option::Option<plugin_command::Payload>,
 }
@@ -104,7 +104,353 @@ pub mod plugin_command {
         DeleteDeadSessionPayload(::prost::alloc::string::String),
         #[prost(string, tag = "46")]
         RenameSessionPayload(::prost::alloc::string::String),
+        #[prost(string, tag = "47")]
+        UnblockCliPipeInputPayload(::prost::alloc::string::String),
+        #[prost(string, tag = "48")]
+        BlockCliPipeInputPayload(::prost::alloc::string::String),
+        #[prost(message, tag = "49")]
+        CliPipeOutputPayload(super::CliPipeOutputPayload),
+        #[prost(message, tag = "50")]
+        MessageToPluginPayload(super::MessageToPluginPayload),
+        #[prost(message, tag = "60")]
+        KillSessionsPayload(super::KillSessionsPayload),
+        #[prost(string, tag = "61")]
+        ScanHostFolderPayload(::prost::alloc::string::String),
+        #[prost(message, tag = "62")]
+        NewTabsWithLayoutInfoPayload(super::NewTabsWithLayoutInfoPayload),
+        #[prost(message, tag = "63")]
+        ReconfigurePayload(super::ReconfigurePayload),
+        #[prost(message, tag = "64")]
+        HidePaneWithIdPayload(super::HidePaneWithIdPayload),
+        #[prost(message, tag = "65")]
+        ShowPaneWithIdPayload(super::ShowPaneWithIdPayload),
+        #[prost(message, tag = "66")]
+        OpenCommandPaneBackgroundPayload(super::OpenCommandPanePayload),
+        #[prost(message, tag = "67")]
+        RerunCommandPanePayload(super::RerunCommandPanePayload),
+        #[prost(message, tag = "68")]
+        ResizePaneIdWithDirectionPayload(super::ResizePaneIdWithDirectionPayload),
+        #[prost(message, tag = "69")]
+        EditScrollbackForPaneWithIdPayload(super::EditScrollbackForPaneWithIdPayload),
+        #[prost(message, tag = "70")]
+        WriteToPaneIdPayload(super::WriteToPaneIdPayload),
+        #[prost(message, tag = "71")]
+        WriteCharsToPaneIdPayload(super::WriteCharsToPaneIdPayload),
+        #[prost(message, tag = "72")]
+        MovePaneWithPaneIdPayload(super::MovePaneWithPaneIdPayload),
+        #[prost(message, tag = "73")]
+        MovePaneWithPaneIdInDirectionPayload(
+            super::MovePaneWithPaneIdInDirectionPayload,
+        ),
+        #[prost(message, tag = "74")]
+        ClearScreenForPaneIdPayload(super::ClearScreenForPaneIdPayload),
+        #[prost(message, tag = "75")]
+        ScrollUpInPaneIdPayload(super::ScrollUpInPaneIdPayload),
+        #[prost(message, tag = "76")]
+        ScrollDownInPaneIdPayload(super::ScrollDownInPaneIdPayload),
+        #[prost(message, tag = "77")]
+        ScrollToTopInPaneIdPayload(super::ScrollToTopInPaneIdPayload),
+        #[prost(message, tag = "78")]
+        ScrollToBottomInPaneIdPayload(super::ScrollToBottomInPaneIdPayload),
+        #[prost(message, tag = "79")]
+        PageScrollUpInPaneIdPayload(super::PageScrollUpInPaneIdPayload),
+        #[prost(message, tag = "80")]
+        PageScrollDownInPaneIdPayload(super::PageScrollDownInPaneIdPayload),
+        #[prost(message, tag = "81")]
+        TogglePaneIdFullscreenPayload(super::TogglePaneIdFullscreenPayload),
+        #[prost(message, tag = "82")]
+        TogglePaneEmbedOrEjectForPaneIdPayload(
+            super::TogglePaneEmbedOrEjectForPaneIdPayload,
+        ),
+        #[prost(message, tag = "83")]
+        CloseTabWithIndexPayload(super::CloseTabWithIndexPayload),
+        #[prost(message, tag = "84")]
+        BreakPanesToNewTabPayload(super::BreakPanesToNewTabPayload),
+        #[prost(message, tag = "85")]
+        BreakPanesToTabWithIndexPayload(super::BreakPanesToTabWithIndexPayload),
+        #[prost(message, tag = "86")]
+        ReloadPluginPayload(super::ReloadPluginPayload),
+        #[prost(message, tag = "87")]
+        LoadNewPluginPayload(super::LoadNewPluginPayload),
+        #[prost(message, tag = "88")]
+        RebindKeysPayload(super::RebindKeysPayload),
+        #[prost(message, tag = "89")]
+        ChangeHostFolderPayload(super::ChangeHostFolderPayload),
+        #[prost(message, tag = "90")]
+        SetFloatingPanePinnedPayload(super::SetFloatingPanePinnedPayload),
     }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct SetFloatingPanePinnedPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+    #[prost(bool, tag = "2")]
+    pub should_be_pinned: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ChangeHostFolderPayload {
+    #[prost(string, tag = "1")]
+    pub new_host_folder: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RebindKeysPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub keys_to_rebind: ::prost::alloc::vec::Vec<KeyToRebind>,
+    #[prost(message, repeated, tag = "2")]
+    pub keys_to_unbind: ::prost::alloc::vec::Vec<KeyToUnbind>,
+    #[prost(bool, tag = "3")]
+    pub write_config_to_disk: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyToRebind {
+    #[prost(enumeration = "super::input_mode::InputMode", tag = "1")]
+    pub input_mode: i32,
+    #[prost(message, optional, tag = "2")]
+    pub key: ::core::option::Option<super::key::Key>,
+    #[prost(message, repeated, tag = "3")]
+    pub actions: ::prost::alloc::vec::Vec<super::action::Action>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KeyToUnbind {
+    #[prost(enumeration = "super::input_mode::InputMode", tag = "1")]
+    pub input_mode: i32,
+    #[prost(message, optional, tag = "2")]
+    pub key: ::core::option::Option<super::key::Key>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LoadNewPluginPayload {
+    #[prost(string, tag = "1")]
+    pub plugin_url: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "2")]
+    pub plugin_config: ::prost::alloc::vec::Vec<ContextItem>,
+    #[prost(bool, tag = "3")]
+    pub should_load_plugin_in_background: bool,
+    #[prost(bool, tag = "4")]
+    pub should_skip_plugin_cache: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReloadPluginPayload {
+    #[prost(uint32, tag = "1")]
+    pub plugin_id: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BreakPanesToTabWithIndexPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub pane_ids: ::prost::alloc::vec::Vec<PaneId>,
+    #[prost(uint32, tag = "2")]
+    pub tab_index: u32,
+    #[prost(bool, tag = "3")]
+    pub should_change_focus_to_target_tab: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct BreakPanesToNewTabPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub pane_ids: ::prost::alloc::vec::Vec<PaneId>,
+    #[prost(bool, tag = "2")]
+    pub should_change_focus_to_new_tab: bool,
+    #[prost(string, optional, tag = "3")]
+    pub new_tab_name: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MovePaneWithPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MovePaneWithPaneIdInDirectionPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+    #[prost(message, optional, tag = "2")]
+    pub direction: ::core::option::Option<super::resize::MoveDirection>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClearScreenForPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScrollUpInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScrollDownInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScrollToTopInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ScrollToBottomInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PageScrollUpInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PageScrollDownInPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TogglePaneIdFullscreenPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct TogglePaneEmbedOrEjectForPaneIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CloseTabWithIndexPayload {
+    #[prost(uint32, tag = "1")]
+    pub tab_index: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteCharsToPaneIdPayload {
+    #[prost(string, tag = "1")]
+    pub chars_to_write: ::prost::alloc::string::String,
+    #[prost(message, optional, tag = "2")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct WriteToPaneIdPayload {
+    #[prost(bytes = "vec", tag = "1")]
+    pub bytes_to_write: ::prost::alloc::vec::Vec<u8>,
+    #[prost(message, optional, tag = "2")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EditScrollbackForPaneWithIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ResizePaneIdWithDirectionPayload {
+    #[prost(message, optional, tag = "1")]
+    pub resize: ::core::option::Option<super::resize::Resize>,
+    #[prost(message, optional, tag = "2")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ReconfigurePayload {
+    #[prost(string, tag = "1")]
+    pub config: ::prost::alloc::string::String,
+    #[prost(bool, tag = "2")]
+    pub write_to_disk: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct RerunCommandPanePayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HidePaneWithIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ShowPaneWithIdPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+    #[prost(bool, tag = "2")]
+    pub should_float_if_hidden: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewTabsWithLayoutInfoPayload {
+    #[prost(message, optional, tag = "1")]
+    pub layout_info: ::core::option::Option<super::event::LayoutInfo>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct KillSessionsPayload {
+    #[prost(string, repeated, tag = "1")]
+    pub session_names: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CliPipeOutputPayload {
+    #[prost(string, tag = "1")]
+    pub pipe_name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub output: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct MessageToPluginPayload {
+    #[prost(string, optional, tag = "1")]
+    pub plugin_url: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "2")]
+    pub plugin_config: ::prost::alloc::vec::Vec<ContextItem>,
+    #[prost(string, tag = "3")]
+    pub message_name: ::prost::alloc::string::String,
+    #[prost(string, optional, tag = "4")]
+    pub message_payload: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "5")]
+    pub message_args: ::prost::alloc::vec::Vec<ContextItem>,
+    #[prost(message, optional, tag = "6")]
+    pub new_plugin_args: ::core::option::Option<NewPluginArgs>,
+    #[prost(uint32, optional, tag = "7")]
+    pub destination_plugin_id: ::core::option::Option<u32>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct NewPluginArgs {
+    #[prost(bool, optional, tag = "1")]
+    pub should_float: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "2")]
+    pub pane_id_to_replace: ::core::option::Option<PaneId>,
+    #[prost(string, optional, tag = "3")]
+    pub pane_title: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(string, optional, tag = "4")]
+    pub cwd: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(bool, tag = "5")]
+    pub skip_cache: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PaneId {
+    #[prost(enumeration = "PaneType", tag = "1")]
+    pub pane_type: i32,
+    #[prost(uint32, tag = "2")]
+    pub id: u32,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -117,6 +463,10 @@ pub struct SwitchSessionPayload {
     pub pane_id: ::core::option::Option<u32>,
     #[prost(bool, optional, tag = "4")]
     pub pane_id_is_plugin: ::core::option::Option<bool>,
+    #[prost(message, optional, tag = "5")]
+    pub layout: ::core::option::Option<super::event::LayoutInfo>,
+    #[prost(string, optional, tag = "6")]
+    pub cwd: ::core::option::Option<::prost::alloc::string::String>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -145,12 +495,20 @@ pub struct UnsubscribePayload {
 pub struct OpenFilePayload {
     #[prost(message, optional, tag = "1")]
     pub file_to_open: ::core::option::Option<super::file::File>,
+    #[prost(message, optional, tag = "2")]
+    pub floating_pane_coordinates: ::core::option::Option<FloatingPaneCoordinates>,
+    #[prost(message, repeated, tag = "3")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
 pub struct OpenCommandPanePayload {
     #[prost(message, optional, tag = "1")]
     pub command_to_run: ::core::option::Option<super::command::Command>,
+    #[prost(message, optional, tag = "2")]
+    pub floating_pane_coordinates: ::core::option::Option<FloatingPaneCoordinates>,
+    #[prost(message, repeated, tag = "3")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -239,6 +597,28 @@ pub struct IdAndNewName {
     #[prost(string, tag = "2")]
     pub new_name: ::prost::alloc::string::String,
 }
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FloatingPaneCoordinates {
+    #[prost(message, optional, tag = "1")]
+    pub x: ::core::option::Option<FixedOrPercentValue>,
+    #[prost(message, optional, tag = "2")]
+    pub y: ::core::option::Option<FixedOrPercentValue>,
+    #[prost(message, optional, tag = "3")]
+    pub width: ::core::option::Option<FixedOrPercentValue>,
+    #[prost(message, optional, tag = "4")]
+    pub height: ::core::option::Option<FixedOrPercentValue>,
+    #[prost(bool, optional, tag = "5")]
+    pub pinned: ::core::option::Option<bool>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FixedOrPercentValue {
+    #[prost(enumeration = "FixedOrPercent", tag = "1")]
+    pub r#type: i32,
+    #[prost(uint32, tag = "2")]
+    pub value: u32,
+}
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
 #[repr(i32)]
 pub enum CommandName {
@@ -318,6 +698,46 @@ pub enum CommandName {
     DeleteDeadSession = 73,
     DeleteAllDeadSessions = 74,
     RenameSession = 75,
+    UnblockCliPipeInput = 76,
+    BlockCliPipeInput = 77,
+    CliPipeOutput = 78,
+    MessageToPlugin = 79,
+    DisconnectOtherClients = 80,
+    KillSessions = 81,
+    ScanHostFolder = 82,
+    WatchFilesystem = 83,
+    DumpSessionLayout = 84,
+    CloseSelf = 85,
+    NewTabsWithLayoutInfo = 86,
+    Reconfigure = 87,
+    HidePaneWithId = 88,
+    ShowPaneWithId = 89,
+    OpenCommandPaneBackground = 90,
+    RerunCommandPane = 91,
+    ResizePaneIdWithDirection = 92,
+    EditScrollbackForPaneWithId = 93,
+    WriteToPaneId = 94,
+    WriteCharsToPaneId = 95,
+    MovePaneWithPaneId = 96,
+    MovePaneWithPaneIdInDirection = 97,
+    ClearScreenForPaneId = 98,
+    ScrollUpInPaneId = 99,
+    ScrollDownInPaneId = 100,
+    ScrollToTopInPaneId = 101,
+    ScrollToBottomInPaneId = 102,
+    PageScrollUpInPaneId = 103,
+    PageScrollDownInPaneId = 104,
+    TogglePaneIdFullscreen = 105,
+    TogglePaneEmbedOrEjectForPaneId = 106,
+    CloseTabWithIndex = 107,
+    BreakPanesToNewTab = 108,
+    BreakPanesToTabWithIndex = 109,
+    ReloadPlugin = 110,
+    LoadNewPlugin = 111,
+    RebindKeys = 112,
+    ListClients = 113,
+    ChangeHostFolder = 114,
+    SetFloatingPanePinned = 115,
 }
 impl CommandName {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -402,6 +822,48 @@ impl CommandName {
             CommandName::DeleteDeadSession => "DeleteDeadSession",
             CommandName::DeleteAllDeadSessions => "DeleteAllDeadSessions",
             CommandName::RenameSession => "RenameSession",
+            CommandName::UnblockCliPipeInput => "UnblockCliPipeInput",
+            CommandName::BlockCliPipeInput => "BlockCliPipeInput",
+            CommandName::CliPipeOutput => "CliPipeOutput",
+            CommandName::MessageToPlugin => "MessageToPlugin",
+            CommandName::DisconnectOtherClients => "DisconnectOtherClients",
+            CommandName::KillSessions => "KillSessions",
+            CommandName::ScanHostFolder => "ScanHostFolder",
+            CommandName::WatchFilesystem => "WatchFilesystem",
+            CommandName::DumpSessionLayout => "DumpSessionLayout",
+            CommandName::CloseSelf => "CloseSelf",
+            CommandName::NewTabsWithLayoutInfo => "NewTabsWithLayoutInfo",
+            CommandName::Reconfigure => "Reconfigure",
+            CommandName::HidePaneWithId => "HidePaneWithId",
+            CommandName::ShowPaneWithId => "ShowPaneWithId",
+            CommandName::OpenCommandPaneBackground => "OpenCommandPaneBackground",
+            CommandName::RerunCommandPane => "RerunCommandPane",
+            CommandName::ResizePaneIdWithDirection => "ResizePaneIdWithDirection",
+            CommandName::EditScrollbackForPaneWithId => "EditScrollbackForPaneWithId",
+            CommandName::WriteToPaneId => "WriteToPaneId",
+            CommandName::WriteCharsToPaneId => "WriteCharsToPaneId",
+            CommandName::MovePaneWithPaneId => "MovePaneWithPaneId",
+            CommandName::MovePaneWithPaneIdInDirection => "MovePaneWithPaneIdInDirection",
+            CommandName::ClearScreenForPaneId => "ClearScreenForPaneId",
+            CommandName::ScrollUpInPaneId => "ScrollUpInPaneId",
+            CommandName::ScrollDownInPaneId => "ScrollDownInPaneId",
+            CommandName::ScrollToTopInPaneId => "ScrollToTopInPaneId",
+            CommandName::ScrollToBottomInPaneId => "ScrollToBottomInPaneId",
+            CommandName::PageScrollUpInPaneId => "PageScrollUpInPaneId",
+            CommandName::PageScrollDownInPaneId => "PageScrollDownInPaneId",
+            CommandName::TogglePaneIdFullscreen => "TogglePaneIdFullscreen",
+            CommandName::TogglePaneEmbedOrEjectForPaneId => {
+                "TogglePaneEmbedOrEjectForPaneId"
+            }
+            CommandName::CloseTabWithIndex => "CloseTabWithIndex",
+            CommandName::BreakPanesToNewTab => "BreakPanesToNewTab",
+            CommandName::BreakPanesToTabWithIndex => "BreakPanesToTabWithIndex",
+            CommandName::ReloadPlugin => "ReloadPlugin",
+            CommandName::LoadNewPlugin => "LoadNewPlugin",
+            CommandName::RebindKeys => "RebindKeys",
+            CommandName::ListClients => "ListClients",
+            CommandName::ChangeHostFolder => "ChangeHostFolder",
+            CommandName::SetFloatingPanePinned => "SetFloatingPanePinned",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -483,6 +945,74 @@ impl CommandName {
             "DeleteDeadSession" => Some(Self::DeleteDeadSession),
             "DeleteAllDeadSessions" => Some(Self::DeleteAllDeadSessions),
             "RenameSession" => Some(Self::RenameSession),
+            "UnblockCliPipeInput" => Some(Self::UnblockCliPipeInput),
+            "BlockCliPipeInput" => Some(Self::BlockCliPipeInput),
+            "CliPipeOutput" => Some(Self::CliPipeOutput),
+            "MessageToPlugin" => Some(Self::MessageToPlugin),
+            "DisconnectOtherClients" => Some(Self::DisconnectOtherClients),
+            "KillSessions" => Some(Self::KillSessions),
+            "ScanHostFolder" => Some(Self::ScanHostFolder),
+            "WatchFilesystem" => Some(Self::WatchFilesystem),
+            "DumpSessionLayout" => Some(Self::DumpSessionLayout),
+            "CloseSelf" => Some(Self::CloseSelf),
+            "NewTabsWithLayoutInfo" => Some(Self::NewTabsWithLayoutInfo),
+            "Reconfigure" => Some(Self::Reconfigure),
+            "HidePaneWithId" => Some(Self::HidePaneWithId),
+            "ShowPaneWithId" => Some(Self::ShowPaneWithId),
+            "OpenCommandPaneBackground" => Some(Self::OpenCommandPaneBackground),
+            "RerunCommandPane" => Some(Self::RerunCommandPane),
+            "ResizePaneIdWithDirection" => Some(Self::ResizePaneIdWithDirection),
+            "EditScrollbackForPaneWithId" => Some(Self::EditScrollbackForPaneWithId),
+            "WriteToPaneId" => Some(Self::WriteToPaneId),
+            "WriteCharsToPaneId" => Some(Self::WriteCharsToPaneId),
+            "MovePaneWithPaneId" => Some(Self::MovePaneWithPaneId),
+            "MovePaneWithPaneIdInDirection" => Some(Self::MovePaneWithPaneIdInDirection),
+            "ClearScreenForPaneId" => Some(Self::ClearScreenForPaneId),
+            "ScrollUpInPaneId" => Some(Self::ScrollUpInPaneId),
+            "ScrollDownInPaneId" => Some(Self::ScrollDownInPaneId),
+            "ScrollToTopInPaneId" => Some(Self::ScrollToTopInPaneId),
+            "ScrollToBottomInPaneId" => Some(Self::ScrollToBottomInPaneId),
+            "PageScrollUpInPaneId" => Some(Self::PageScrollUpInPaneId),
+            "PageScrollDownInPaneId" => Some(Self::PageScrollDownInPaneId),
+            "TogglePaneIdFullscreen" => Some(Self::TogglePaneIdFullscreen),
+            "TogglePaneEmbedOrEjectForPaneId" => {
+                Some(Self::TogglePaneEmbedOrEjectForPaneId)
+            }
+            "CloseTabWithIndex" => Some(Self::CloseTabWithIndex),
+            "BreakPanesToNewTab" => Some(Self::BreakPanesToNewTab),
+            "BreakPanesToTabWithIndex" => Some(Self::BreakPanesToTabWithIndex),
+            "ReloadPlugin" => Some(Self::ReloadPlugin),
+            "LoadNewPlugin" => Some(Self::LoadNewPlugin),
+            "RebindKeys" => Some(Self::RebindKeys),
+            "ListClients" => Some(Self::ListClients),
+            "ChangeHostFolder" => Some(Self::ChangeHostFolder),
+            "SetFloatingPanePinned" => Some(Self::SetFloatingPanePinned),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PaneType {
+    Terminal = 0,
+    Plugin = 1,
+}
+impl PaneType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            PaneType::Terminal => "Terminal",
+            PaneType::Plugin => "Plugin",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Terminal" => Some(Self::Terminal),
+            "Plugin" => Some(Self::Plugin),
             _ => None,
         }
     }
@@ -515,6 +1045,32 @@ impl HttpVerb {
             "Post" => Some(Self::Post),
             "Put" => Some(Self::Put),
             "Delete" => Some(Self::Delete),
+            _ => None,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum FixedOrPercent {
+    Fixed = 0,
+    Percent = 1,
+}
+impl FixedOrPercent {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            FixedOrPercent::Fixed => "Fixed",
+            FixedOrPercent::Percent => "Percent",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Fixed" => Some(Self::Fixed),
+            "Percent" => Some(Self::Percent),
             _ => None,
         }
     }

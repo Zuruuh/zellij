@@ -1,11 +1,14 @@
 pub use super::generated_api::api::{
     action::{Action as ProtobufAction, Position as ProtobufPosition},
     event::{
-        event::Payload as ProtobufEventPayload, CopyDestination as ProtobufCopyDestination,
-        Event as ProtobufEvent, EventNameList as ProtobufEventNameList,
-        EventType as ProtobufEventType, InputModeKeybinds as ProtobufInputModeKeybinds,
-        KeyBind as ProtobufKeyBind, ModeUpdatePayload as ProtobufModeUpdatePayload,
+        event::Payload as ProtobufEventPayload, ClientInfo as ProtobufClientInfo,
+        CopyDestination as ProtobufCopyDestination, Event as ProtobufEvent,
+        EventNameList as ProtobufEventNameList, EventType as ProtobufEventType,
+        FileMetadata as ProtobufFileMetadata, InputModeKeybinds as ProtobufInputModeKeybinds,
+        KeyBind as ProtobufKeyBind, LayoutInfo as ProtobufLayoutInfo,
+        ModeUpdatePayload as ProtobufModeUpdatePayload, PaneId as ProtobufPaneId,
         PaneInfo as ProtobufPaneInfo, PaneManifest as ProtobufPaneManifest,
+        PaneType as ProtobufPaneType, PluginInfo as ProtobufPluginInfo,
         ResurrectableSession as ProtobufResurrectableSession,
         SessionManifest as ProtobufSessionManifest, TabInfo as ProtobufTabInfo, *,
     },
@@ -13,15 +16,17 @@ pub use super::generated_api::api::{
     key::Key as ProtobufKey,
     style::Style as ProtobufStyle,
 };
+#[allow(hidden_glob_reexports)]
 use crate::data::{
-    CopyDestination, Event, EventType, InputMode, Key, ModeInfo, Mouse, PaneInfo, PaneManifest,
-    PermissionStatus, PluginCapabilities, SessionInfo, Style, TabInfo,
+    ClientInfo, CopyDestination, Event, EventType, FileMetadata, InputMode, KeyWithModifier,
+    LayoutInfo, ModeInfo, Mouse, PaneId, PaneInfo, PaneManifest, PermissionStatus,
+    PluginCapabilities, PluginInfo, SessionInfo, Style, TabInfo,
 };
 
 use crate::errors::prelude::*;
 use crate::input::actions::Action;
 
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeMap, HashMap, HashSet};
 use std::convert::TryFrom;
 use std::path::PathBuf;
 use std::time::Duration;
@@ -124,7 +129,8 @@ impl TryFrom<ProtobufEvent> for Event {
                     let file_paths = file_list_payload
                         .paths
                         .iter()
-                        .map(|p| PathBuf::from(p))
+                        .zip(file_list_payload.paths_metadata.iter())
+                        .map(|(p, m)| (PathBuf::from(p), m.into()))
                         .collect();
                     Ok(Event::FileSystemCreate(file_paths))
                 },
@@ -135,7 +141,8 @@ impl TryFrom<ProtobufEvent> for Event {
                     let file_paths = file_list_payload
                         .paths
                         .iter()
-                        .map(|p| PathBuf::from(p))
+                        .zip(file_list_payload.paths_metadata.iter())
+                        .map(|(p, m)| (PathBuf::from(p), m.into()))
                         .collect();
                     Ok(Event::FileSystemRead(file_paths))
                 },
@@ -146,7 +153,8 @@ impl TryFrom<ProtobufEvent> for Event {
                     let file_paths = file_list_payload
                         .paths
                         .iter()
-                        .map(|p| PathBuf::from(p))
+                        .zip(file_list_payload.paths_metadata.iter())
+                        .map(|(p, m)| (PathBuf::from(p), m.into()))
                         .collect();
                     Ok(Event::FileSystemUpdate(file_paths))
                 },
@@ -157,7 +165,8 @@ impl TryFrom<ProtobufEvent> for Event {
                     let file_paths = file_list_payload
                         .paths
                         .iter()
-                        .map(|p| PathBuf::from(p))
+                        .zip(file_list_payload.paths_metadata.iter())
+                        .map(|(p, m)| (PathBuf::from(p), m.into()))
                         .collect();
                     Ok(Event::FileSystemDelete(file_paths))
                 },
@@ -228,8 +237,147 @@ impl TryFrom<ProtobufEvent> for Event {
                 },
                 _ => Err("Malformed payload for the WebRequestResult Event"),
             },
+            Some(ProtobufEventType::CommandPaneOpened) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::CommandPaneOpenedPayload(
+                    command_pane_opened_payload,
+                )) => Ok(Event::CommandPaneOpened(
+                    command_pane_opened_payload.terminal_pane_id,
+                    command_pane_opened_payload
+                        .context
+                        .into_iter()
+                        .map(|c_i| (c_i.name, c_i.value))
+                        .collect(),
+                )),
+                _ => Err("Malformed payload for the CommandPaneOpened Event"),
+            },
+            Some(ProtobufEventType::CommandPaneExited) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::CommandPaneExitedPayload(
+                    command_pane_exited_payload,
+                )) => Ok(Event::CommandPaneExited(
+                    command_pane_exited_payload.terminal_pane_id,
+                    command_pane_exited_payload.exit_code,
+                    command_pane_exited_payload
+                        .context
+                        .into_iter()
+                        .map(|c_i| (c_i.name, c_i.value))
+                        .collect(),
+                )),
+                _ => Err("Malformed payload for the CommandPaneExited Event"),
+            },
+            Some(ProtobufEventType::PaneClosed) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::PaneClosedPayload(pane_closed_payload)) => {
+                    let pane_id = pane_closed_payload
+                        .pane_id
+                        .ok_or("Malformed payload for the PaneClosed Event")?;
+                    Ok(Event::PaneClosed(PaneId::try_from(pane_id)?))
+                },
+                _ => Err("Malformed payload for the PaneClosed Event"),
+            },
+            Some(ProtobufEventType::EditPaneOpened) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::EditPaneOpenedPayload(command_pane_opened_payload)) => {
+                    Ok(Event::EditPaneOpened(
+                        command_pane_opened_payload.terminal_pane_id,
+                        command_pane_opened_payload
+                            .context
+                            .into_iter()
+                            .map(|c_i| (c_i.name, c_i.value))
+                            .collect(),
+                    ))
+                },
+                _ => Err("Malformed payload for the EditPaneOpened Event"),
+            },
+            Some(ProtobufEventType::EditPaneExited) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::EditPaneExitedPayload(command_pane_exited_payload)) => {
+                    Ok(Event::EditPaneExited(
+                        command_pane_exited_payload.terminal_pane_id,
+                        command_pane_exited_payload.exit_code,
+                        command_pane_exited_payload
+                            .context
+                            .into_iter()
+                            .map(|c_i| (c_i.name, c_i.value))
+                            .collect(),
+                    ))
+                },
+                _ => Err("Malformed payload for the EditPaneExited Event"),
+            },
+            Some(ProtobufEventType::CommandPaneReRun) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::CommandPaneRerunPayload(command_pane_rerun_payload)) => {
+                    Ok(Event::CommandPaneReRun(
+                        command_pane_rerun_payload.terminal_pane_id,
+                        command_pane_rerun_payload
+                            .context
+                            .into_iter()
+                            .map(|c_i| (c_i.name, c_i.value))
+                            .collect(),
+                    ))
+                },
+                _ => Err("Malformed payload for the CommandPaneReRun Event"),
+            },
+            Some(ProtobufEventType::FailedToWriteConfigToDisk) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::FailedToWriteConfigToDiskPayload(
+                    failed_to_write_configuration_payload,
+                )) => Ok(Event::FailedToWriteConfigToDisk(
+                    failed_to_write_configuration_payload.file_path,
+                )),
+                _ => Err("Malformed payload for the FailedToWriteConfigToDisk Event"),
+            },
+            Some(ProtobufEventType::ListClients) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::ListClientsPayload(mut list_clients_payload)) => {
+                    Ok(Event::ListClients(
+                        list_clients_payload
+                            .client_info
+                            .drain(..)
+                            .filter_map(|c| c.try_into().ok())
+                            .collect(),
+                    ))
+                },
+                _ => Err("Malformed payload for the FailedToWriteConfigToDisk Event"),
+            },
+            Some(ProtobufEventType::HostFolderChanged) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::HostFolderChangedPayload(
+                    host_folder_changed_payload,
+                )) => Ok(Event::HostFolderChanged(PathBuf::from(
+                    host_folder_changed_payload.new_host_folder_path,
+                ))),
+                _ => Err("Malformed payload for the HostFolderChanged Event"),
+            },
+            Some(ProtobufEventType::FailedToChangeHostFolder) => match protobuf_event.payload {
+                Some(ProtobufEventPayload::FailedToChangeHostFolderPayload(
+                    failed_to_change_host_folder_payload,
+                )) => Ok(Event::FailedToChangeHostFolder(
+                    failed_to_change_host_folder_payload.error_message,
+                )),
+                _ => Err("Malformed payload for the FailedToChangeHostFolder Event"),
+            },
             None => Err("Unknown Protobuf Event"),
         }
+    }
+}
+
+impl TryFrom<ProtobufClientInfo> for ClientInfo {
+    type Error = &'static str;
+    fn try_from(protobuf_client_info: ProtobufClientInfo) -> Result<Self, &'static str> {
+        Ok(ClientInfo::new(
+            protobuf_client_info.client_id as u16,
+            protobuf_client_info
+                .pane_id
+                .ok_or("No pane id found")?
+                .try_into()?,
+            protobuf_client_info.running_command,
+            protobuf_client_info.is_current_client,
+        ))
+    }
+}
+
+impl TryFrom<ClientInfo> for ProtobufClientInfo {
+    type Error = &'static str;
+    fn try_from(client_info: ClientInfo) -> Result<Self, &'static str> {
+        Ok(ProtobufClientInfo {
+            client_id: client_info.client_id as u32,
+            pane_id: Some(client_info.pane_id.try_into()?),
+            running_command: client_info.running_command,
+            is_current_client: client_info.is_current_client,
+        })
     }
 }
 
@@ -322,36 +470,64 @@ impl TryFrom<Event> for ProtobufEvent {
                     payload,
                 })),
             }),
-            Event::FileSystemCreate(paths) => {
+            Event::FileSystemCreate(event_paths) => {
+                let mut paths = vec![];
+                let mut paths_metadata = vec![];
+                for (path, path_metadata) in event_paths {
+                    paths.push(path.display().to_string());
+                    paths_metadata.push(path_metadata.into());
+                }
                 let file_list_payload = FileListPayload {
-                    paths: paths.iter().map(|p| p.display().to_string()).collect(),
+                    paths,
+                    paths_metadata,
                 };
                 Ok(ProtobufEvent {
                     name: ProtobufEventType::FileSystemCreate as i32,
                     payload: Some(event::Payload::FileListPayload(file_list_payload)),
                 })
             },
-            Event::FileSystemRead(paths) => {
+            Event::FileSystemRead(event_paths) => {
+                let mut paths = vec![];
+                let mut paths_metadata = vec![];
+                for (path, path_metadata) in event_paths {
+                    paths.push(path.display().to_string());
+                    paths_metadata.push(path_metadata.into());
+                }
                 let file_list_payload = FileListPayload {
-                    paths: paths.iter().map(|p| p.display().to_string()).collect(),
+                    paths,
+                    paths_metadata,
                 };
                 Ok(ProtobufEvent {
                     name: ProtobufEventType::FileSystemRead as i32,
                     payload: Some(event::Payload::FileListPayload(file_list_payload)),
                 })
             },
-            Event::FileSystemUpdate(paths) => {
+            Event::FileSystemUpdate(event_paths) => {
+                let mut paths = vec![];
+                let mut paths_metadata = vec![];
+                for (path, path_metadata) in event_paths {
+                    paths.push(path.display().to_string());
+                    paths_metadata.push(path_metadata.into());
+                }
                 let file_list_payload = FileListPayload {
-                    paths: paths.iter().map(|p| p.display().to_string()).collect(),
+                    paths,
+                    paths_metadata,
                 };
                 Ok(ProtobufEvent {
                     name: ProtobufEventType::FileSystemUpdate as i32,
                     payload: Some(event::Payload::FileListPayload(file_list_payload)),
                 })
             },
-            Event::FileSystemDelete(paths) => {
+            Event::FileSystemDelete(event_paths) => {
+                let mut paths = vec![];
+                let mut paths_metadata = vec![];
+                for (path, path_metadata) in event_paths {
+                    paths.push(path.display().to_string());
+                    paths_metadata.push(path_metadata.into());
+                }
                 let file_list_payload = FileListPayload {
-                    paths: paths.iter().map(|p| p.display().to_string()).collect(),
+                    paths,
+                    paths_metadata,
                 };
                 Ok(ProtobufEvent {
                     name: ProtobufEventType::FileSystemDelete as i32,
@@ -425,6 +601,118 @@ impl TryFrom<Event> for ProtobufEvent {
                     )),
                 })
             },
+            Event::CommandPaneOpened(terminal_pane_id, context) => {
+                let command_pane_opened_payload = CommandPaneOpenedPayload {
+                    terminal_pane_id,
+                    context: context
+                        .into_iter()
+                        .map(|(name, value)| ContextItem { name, value })
+                        .collect(),
+                };
+                Ok(ProtobufEvent {
+                    name: ProtobufEventType::CommandPaneOpened as i32,
+                    payload: Some(event::Payload::CommandPaneOpenedPayload(
+                        command_pane_opened_payload,
+                    )),
+                })
+            },
+            Event::CommandPaneExited(terminal_pane_id, exit_code, context) => {
+                let command_pane_exited_payload = CommandPaneExitedPayload {
+                    terminal_pane_id,
+                    exit_code,
+                    context: context
+                        .into_iter()
+                        .map(|(name, value)| ContextItem { name, value })
+                        .collect(),
+                };
+                Ok(ProtobufEvent {
+                    name: ProtobufEventType::CommandPaneExited as i32,
+                    payload: Some(event::Payload::CommandPaneExitedPayload(
+                        command_pane_exited_payload,
+                    )),
+                })
+            },
+            Event::PaneClosed(pane_id) => Ok(ProtobufEvent {
+                name: ProtobufEventType::PaneClosed as i32,
+                payload: Some(event::Payload::PaneClosedPayload(PaneClosedPayload {
+                    pane_id: Some(pane_id.try_into()?),
+                })),
+            }),
+            Event::EditPaneOpened(terminal_pane_id, context) => {
+                let command_pane_opened_payload = EditPaneOpenedPayload {
+                    terminal_pane_id,
+                    context: context
+                        .into_iter()
+                        .map(|(name, value)| ContextItem { name, value })
+                        .collect(),
+                };
+                Ok(ProtobufEvent {
+                    name: ProtobufEventType::EditPaneOpened as i32,
+                    payload: Some(event::Payload::EditPaneOpenedPayload(
+                        command_pane_opened_payload,
+                    )),
+                })
+            },
+            Event::EditPaneExited(terminal_pane_id, exit_code, context) => {
+                let command_pane_exited_payload = EditPaneExitedPayload {
+                    terminal_pane_id,
+                    exit_code,
+                    context: context
+                        .into_iter()
+                        .map(|(name, value)| ContextItem { name, value })
+                        .collect(),
+                };
+                Ok(ProtobufEvent {
+                    name: ProtobufEventType::EditPaneExited as i32,
+                    payload: Some(event::Payload::EditPaneExitedPayload(
+                        command_pane_exited_payload,
+                    )),
+                })
+            },
+            Event::CommandPaneReRun(terminal_pane_id, context) => {
+                let command_pane_rerun_payload = CommandPaneReRunPayload {
+                    terminal_pane_id,
+                    context: context
+                        .into_iter()
+                        .map(|(name, value)| ContextItem { name, value })
+                        .collect(),
+                };
+                Ok(ProtobufEvent {
+                    name: ProtobufEventType::CommandPaneReRun as i32,
+                    payload: Some(event::Payload::CommandPaneRerunPayload(
+                        command_pane_rerun_payload,
+                    )),
+                })
+            },
+            Event::FailedToWriteConfigToDisk(file_path) => Ok(ProtobufEvent {
+                name: ProtobufEventType::FailedToWriteConfigToDisk as i32,
+                payload: Some(event::Payload::FailedToWriteConfigToDiskPayload(
+                    FailedToWriteConfigToDiskPayload { file_path },
+                )),
+            }),
+            Event::ListClients(mut client_info_list) => Ok(ProtobufEvent {
+                name: ProtobufEventType::ListClients as i32,
+                payload: Some(event::Payload::ListClientsPayload(ListClientsPayload {
+                    client_info: client_info_list
+                        .drain(..)
+                        .filter_map(|c| c.try_into().ok())
+                        .collect(),
+                })),
+            }),
+            Event::HostFolderChanged(new_host_folder_path) => Ok(ProtobufEvent {
+                name: ProtobufEventType::HostFolderChanged as i32,
+                payload: Some(event::Payload::HostFolderChangedPayload(
+                    HostFolderChangedPayload {
+                        new_host_folder_path: new_host_folder_path.display().to_string(),
+                    },
+                )),
+            }),
+            Event::FailedToChangeHostFolder(error_message) => Ok(ProtobufEvent {
+                name: ProtobufEventType::FailedToChangeHostFolder as i32,
+                payload: Some(event::Payload::FailedToChangeHostFolderPayload(
+                    FailedToChangeHostFolderPayload { error_message },
+                )),
+            }),
         }
     }
 }
@@ -453,7 +741,31 @@ impl TryFrom<SessionInfo> for ProtobufSessionManifest {
                 .collect(),
             connected_clients: session_info.connected_clients as u32,
             is_current_session: session_info.is_current_session,
+            available_layouts: session_info
+                .available_layouts
+                .into_iter()
+                .filter_map(|l| ProtobufLayoutInfo::try_from(l).ok())
+                .collect(),
+            plugins: session_info
+                .plugins
+                .into_iter()
+                .map(|p| ProtobufPluginInfo::from(p))
+                .collect(),
         })
+    }
+}
+
+impl From<(u32, PluginInfo)> for ProtobufPluginInfo {
+    fn from((plugin_id, plugin_info): (u32, PluginInfo)) -> ProtobufPluginInfo {
+        ProtobufPluginInfo {
+            plugin_id,
+            plugin_url: plugin_info.location,
+            plugin_config: plugin_info
+                .configuration
+                .into_iter()
+                .map(|(name, value)| ContextItem { name, value })
+                .collect(),
+        }
     }
 }
 
@@ -475,6 +787,20 @@ impl TryFrom<ProtobufSessionManifest> for SessionInfo {
         let panes = PaneManifest {
             panes: pane_manifest,
         };
+        let mut plugins = BTreeMap::new();
+        for plugin_info in protobuf_session_manifest.plugins.into_iter() {
+            let mut configuration = BTreeMap::new();
+            for context_item in plugin_info.plugin_config.into_iter() {
+                configuration.insert(context_item.name, context_item.value);
+            }
+            plugins.insert(
+                plugin_info.plugin_id,
+                PluginInfo {
+                    location: plugin_info.plugin_url,
+                    configuration,
+                },
+            );
+        }
         Ok(SessionInfo {
             name: protobuf_session_manifest.name,
             tabs: protobuf_session_manifest
@@ -485,7 +811,50 @@ impl TryFrom<ProtobufSessionManifest> for SessionInfo {
             panes,
             connected_clients: protobuf_session_manifest.connected_clients as usize,
             is_current_session: protobuf_session_manifest.is_current_session,
+            available_layouts: protobuf_session_manifest
+                .available_layouts
+                .into_iter()
+                .filter_map(|l| LayoutInfo::try_from(l).ok())
+                .collect(),
+            plugins,
         })
+    }
+}
+
+impl TryFrom<LayoutInfo> for ProtobufLayoutInfo {
+    type Error = &'static str;
+    fn try_from(layout_info: LayoutInfo) -> Result<Self, &'static str> {
+        match layout_info {
+            LayoutInfo::File(name) => Ok(ProtobufLayoutInfo {
+                source: "file".to_owned(),
+                name,
+            }),
+            LayoutInfo::BuiltIn(name) => Ok(ProtobufLayoutInfo {
+                source: "built-in".to_owned(),
+                name,
+            }),
+            LayoutInfo::Url(name) => Ok(ProtobufLayoutInfo {
+                source: "url".to_owned(),
+                name,
+            }),
+            LayoutInfo::Stringified(stringified_layout) => Ok(ProtobufLayoutInfo {
+                source: "stringified".to_owned(),
+                name: stringified_layout.clone(),
+            }),
+        }
+    }
+}
+
+impl TryFrom<ProtobufLayoutInfo> for LayoutInfo {
+    type Error = &'static str;
+    fn try_from(protobuf_layout_info: ProtobufLayoutInfo) -> Result<Self, &'static str> {
+        match protobuf_layout_info.source.as_str() {
+            "file" => Ok(LayoutInfo::File(protobuf_layout_info.name)),
+            "built-in" => Ok(LayoutInfo::BuiltIn(protobuf_layout_info.name)),
+            "url" => Ok(LayoutInfo::Url(protobuf_layout_info.name)),
+            "stringified" => Ok(LayoutInfo::Stringified(protobuf_layout_info.name)),
+            _ => Err("Unknown source for layout"),
+        }
     }
 }
 
@@ -736,29 +1105,33 @@ impl TryFrom<ProtobufModeUpdatePayload> for ModeInfo {
             ProtobufInputMode::from_i32(protobuf_mode_update_payload.current_mode)
                 .ok_or("Malformed InputMode in the ModeUpdate Event")?
                 .try_into()?;
-        let keybinds: Vec<(InputMode, Vec<(Key, Vec<Action>)>)> = protobuf_mode_update_payload
-            .keybinds
-            .iter_mut()
-            .filter_map(|k| {
-                let input_mode: InputMode = ProtobufInputMode::from_i32(k.mode)
-                    .ok_or("Malformed InputMode in the ModeUpdate Event")
-                    .ok()?
-                    .try_into()
-                    .ok()?;
-                let mut keybinds: Vec<(Key, Vec<Action>)> = vec![];
-                for mut protobuf_keybind in k.key_bind.drain(..) {
-                    let key: Key = protobuf_keybind.key.unwrap().try_into().ok()?;
-                    let mut actions: Vec<Action> = vec![];
-                    for action in protobuf_keybind.action.drain(..) {
-                        if let Ok(action) = action.try_into() {
-                            actions.push(action);
+        let base_mode: Option<InputMode> = protobuf_mode_update_payload
+            .base_mode
+            .and_then(|b_m| ProtobufInputMode::from_i32(b_m)?.try_into().ok());
+        let keybinds: Vec<(InputMode, Vec<(KeyWithModifier, Vec<Action>)>)> =
+            protobuf_mode_update_payload
+                .keybinds
+                .iter_mut()
+                .filter_map(|k| {
+                    let input_mode: InputMode = ProtobufInputMode::from_i32(k.mode)
+                        .ok_or("Malformed InputMode in the ModeUpdate Event")
+                        .ok()?
+                        .try_into()
+                        .ok()?;
+                    let mut keybinds: Vec<(KeyWithModifier, Vec<Action>)> = vec![];
+                    for mut protobuf_keybind in k.key_bind.drain(..) {
+                        let key: KeyWithModifier = protobuf_keybind.key.unwrap().try_into().ok()?;
+                        let mut actions: Vec<Action> = vec![];
+                        for action in protobuf_keybind.action.drain(..) {
+                            if let Ok(action) = action.try_into() {
+                                actions.push(action);
+                            }
                         }
+                        keybinds.push((key, actions));
                     }
-                    keybinds.push((key, actions));
-                }
-                Some((input_mode, keybinds))
-            })
-            .collect();
+                    Some((input_mode, keybinds))
+                })
+                .collect();
         let style: Style = protobuf_mode_update_payload
             .style
             .and_then(|m| m.try_into().ok())
@@ -773,6 +1146,7 @@ impl TryFrom<ProtobufModeUpdatePayload> for ModeInfo {
             style,
             capabilities,
             session_name,
+            base_mode,
         };
         Ok(mode_info)
     }
@@ -782,6 +1156,9 @@ impl TryFrom<ModeInfo> for ProtobufModeUpdatePayload {
     type Error = &'static str;
     fn try_from(mode_info: ModeInfo) -> Result<Self, &'static str> {
         let current_mode: ProtobufInputMode = mode_info.mode.try_into()?;
+        let base_mode: Option<ProtobufInputMode> = mode_info
+            .base_mode
+            .and_then(|mode| ProtobufInputMode::try_from(mode).ok());
         let style: ProtobufStyle = mode_info.style.try_into()?;
         let arrow_fonts_support: bool = mode_info.capabilities.arrow_fonts;
         let session_name = mode_info.session_name;
@@ -815,6 +1192,7 @@ impl TryFrom<ModeInfo> for ProtobufModeUpdatePayload {
             keybinds: protobuf_input_mode_keybinds,
             arrow_fonts_support,
             session_name,
+            base_mode: base_mode.map(|b_m| b_m as i32),
         })
     }
 }
@@ -872,6 +1250,16 @@ impl TryFrom<ProtobufEventType> for EventType {
             ProtobufEventType::SessionUpdate => EventType::SessionUpdate,
             ProtobufEventType::RunCommandResult => EventType::RunCommandResult,
             ProtobufEventType::WebRequestResult => EventType::WebRequestResult,
+            ProtobufEventType::CommandPaneOpened => EventType::CommandPaneOpened,
+            ProtobufEventType::CommandPaneExited => EventType::CommandPaneExited,
+            ProtobufEventType::PaneClosed => EventType::PaneClosed,
+            ProtobufEventType::EditPaneOpened => EventType::EditPaneOpened,
+            ProtobufEventType::EditPaneExited => EventType::EditPaneExited,
+            ProtobufEventType::CommandPaneReRun => EventType::CommandPaneReRun,
+            ProtobufEventType::FailedToWriteConfigToDisk => EventType::FailedToWriteConfigToDisk,
+            ProtobufEventType::ListClients => EventType::ListClients,
+            ProtobufEventType::HostFolderChanged => EventType::HostFolderChanged,
+            ProtobufEventType::FailedToChangeHostFolder => EventType::FailedToChangeHostFolder,
         })
     }
 }
@@ -899,6 +1287,16 @@ impl TryFrom<EventType> for ProtobufEventType {
             EventType::SessionUpdate => ProtobufEventType::SessionUpdate,
             EventType::RunCommandResult => ProtobufEventType::RunCommandResult,
             EventType::WebRequestResult => ProtobufEventType::WebRequestResult,
+            EventType::CommandPaneOpened => ProtobufEventType::CommandPaneOpened,
+            EventType::CommandPaneExited => ProtobufEventType::CommandPaneExited,
+            EventType::PaneClosed => ProtobufEventType::PaneClosed,
+            EventType::EditPaneOpened => ProtobufEventType::EditPaneOpened,
+            EventType::EditPaneExited => ProtobufEventType::EditPaneExited,
+            EventType::CommandPaneReRun => ProtobufEventType::CommandPaneReRun,
+            EventType::FailedToWriteConfigToDisk => ProtobufEventType::FailedToWriteConfigToDisk,
+            EventType::ListClients => ProtobufEventType::ListClients,
+            EventType::HostFolderChanged => ProtobufEventType::HostFolderChanged,
+            EventType::FailedToChangeHostFolder => ProtobufEventType::FailedToChangeHostFolder,
         })
     }
 }
@@ -921,6 +1319,39 @@ impl From<(String, Duration)> for ProtobufResurrectableSession {
     }
 }
 
+impl From<&ProtobufFileMetadata> for Option<FileMetadata> {
+    fn from(protobuf_file_metadata: &ProtobufFileMetadata) -> Option<FileMetadata> {
+        if protobuf_file_metadata.metadata_is_set {
+            Some(FileMetadata {
+                is_file: protobuf_file_metadata.is_file,
+                is_dir: protobuf_file_metadata.is_dir,
+                is_symlink: protobuf_file_metadata.is_symlink,
+                len: protobuf_file_metadata.len,
+            })
+        } else {
+            None
+        }
+    }
+}
+
+impl From<Option<FileMetadata>> for ProtobufFileMetadata {
+    fn from(file_metadata: Option<FileMetadata>) -> ProtobufFileMetadata {
+        match file_metadata {
+            Some(file_metadata) => ProtobufFileMetadata {
+                metadata_is_set: true,
+                is_file: file_metadata.is_file,
+                is_dir: file_metadata.is_dir,
+                is_symlink: file_metadata.is_symlink,
+                len: file_metadata.len,
+            },
+            None => ProtobufFileMetadata {
+                metadata_is_set: false,
+                ..Default::default()
+            },
+        }
+    }
+}
+
 #[test]
 fn serialize_mode_update_event() {
     use prost::Message;
@@ -938,7 +1369,7 @@ fn serialize_mode_update_event() {
 
 #[test]
 fn serialize_mode_update_event_with_non_default_values() {
-    use crate::data::{Direction, Palette, PaletteColor, ThemeHue};
+    use crate::data::{BareKey, Palette, PaletteColor, ThemeHue};
     use prost::Message;
     let mode_update_event = Event::ModeUpdate(ModeInfo {
         mode: InputMode::Locked,
@@ -946,14 +1377,14 @@ fn serialize_mode_update_event_with_non_default_values() {
             (
                 InputMode::Locked,
                 vec![(
-                    Key::Alt(crate::data::CharOrArrow::Char('b')),
+                    KeyWithModifier::new(BareKey::Char('b')).with_alt_modifier(),
                     vec![Action::SwitchToMode(InputMode::Normal)],
                 )],
             ),
             (
                 InputMode::Tab,
                 vec![(
-                    Key::Alt(crate::data::CharOrArrow::Direction(Direction::Up)),
+                    KeyWithModifier::new(BareKey::Up).with_alt_modifier(),
                     vec![Action::SwitchToMode(InputMode::Pane)],
                 )],
             ),
@@ -961,13 +1392,16 @@ fn serialize_mode_update_event_with_non_default_values() {
                 InputMode::Pane,
                 vec![
                     (
-                        Key::Ctrl('b'),
+                        KeyWithModifier::new(BareKey::Char('b')).with_ctrl_modifier(),
                         vec![
                             Action::SwitchToMode(InputMode::Tmux),
-                            Action::Write(vec![10]),
+                            Action::Write(None, vec![10], false),
                         ],
                     ),
-                    (Key::Char('a'), vec![Action::WriteChars("foo".to_owned())]),
+                    (
+                        KeyWithModifier::new(BareKey::Char('a')),
+                        vec![Action::WriteChars("foo".to_owned())],
+                    ),
                 ],
             ),
         ],
@@ -998,6 +1432,7 @@ fn serialize_mode_update_event_with_non_default_values() {
         },
         capabilities: PluginCapabilities { arrow_fonts: false },
         session_name: Some("my awesome test session".to_owned()),
+        base_mode: Some(InputMode::Locked),
     });
     let protobuf_event: ProtobufEvent = mode_update_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
@@ -1083,8 +1518,9 @@ fn serialize_pane_update_event() {
 
 #[test]
 fn serialize_key_event() {
+    use crate::data::BareKey;
     use prost::Message;
-    let key_event = Event::Key(Key::Ctrl('a'));
+    let key_event = Event::Key(KeyWithModifier::new(BareKey::Char('a')).with_ctrl_modifier());
     let protobuf_event: ProtobufEvent = key_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
     let deserialized_protobuf_event: ProtobufEvent =
@@ -1219,8 +1655,10 @@ fn serialize_custom_message_event() {
 #[test]
 fn serialize_file_system_create_event() {
     use prost::Message;
-    let file_system_event =
-        Event::FileSystemCreate(vec!["/absolute/path".into(), "./relative_path".into()]);
+    let file_system_event = Event::FileSystemCreate(vec![
+        ("/absolute/path".into(), None),
+        ("./relative_path".into(), Default::default()),
+    ]);
     let protobuf_event: ProtobufEvent = file_system_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
     let deserialized_protobuf_event: ProtobufEvent =
@@ -1235,8 +1673,10 @@ fn serialize_file_system_create_event() {
 #[test]
 fn serialize_file_system_read_event() {
     use prost::Message;
-    let file_system_event =
-        Event::FileSystemRead(vec!["/absolute/path".into(), "./relative_path".into()]);
+    let file_system_event = Event::FileSystemRead(vec![
+        ("/absolute/path".into(), None),
+        ("./relative_path".into(), Default::default()),
+    ]);
     let protobuf_event: ProtobufEvent = file_system_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
     let deserialized_protobuf_event: ProtobufEvent =
@@ -1251,8 +1691,10 @@ fn serialize_file_system_read_event() {
 #[test]
 fn serialize_file_system_update_event() {
     use prost::Message;
-    let file_system_event =
-        Event::FileSystemUpdate(vec!["/absolute/path".into(), "./relative_path".into()]);
+    let file_system_event = Event::FileSystemUpdate(vec![
+        ("/absolute/path".into(), None),
+        ("./relative_path".into(), Some(Default::default())),
+    ]);
     let protobuf_event: ProtobufEvent = file_system_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
     let deserialized_protobuf_event: ProtobufEvent =
@@ -1267,8 +1709,10 @@ fn serialize_file_system_update_event() {
 #[test]
 fn serialize_file_system_delete_event() {
     use prost::Message;
-    let file_system_event =
-        Event::FileSystemDelete(vec!["/absolute/path".into(), "./relative_path".into()]);
+    let file_system_event = Event::FileSystemDelete(vec![
+        ("/absolute/path".into(), None),
+        ("./relative_path".into(), Default::default()),
+    ]);
     let protobuf_event: ProtobufEvent = file_system_event.clone().try_into().unwrap();
     let serialized_protobuf_event = protobuf_event.encode_to_vec();
     let deserialized_protobuf_event: ProtobufEvent =
@@ -1377,12 +1821,28 @@ fn serialize_session_update_event_with_non_default_values() {
         },
     ];
     panes.insert(0, panes_list);
+    let mut plugins = BTreeMap::new();
+    let mut plugin_configuration = BTreeMap::new();
+    plugin_configuration.insert("config_key".to_owned(), "config_value".to_owned());
+    plugins.insert(
+        1,
+        PluginInfo {
+            location: "https://example.com/my-plugin.wasm".to_owned(),
+            configuration: plugin_configuration,
+        },
+    );
     let session_info_1 = SessionInfo {
         name: "session 1".to_owned(),
         tabs: tab_infos,
         panes: PaneManifest { panes },
         connected_clients: 2,
         is_current_session: true,
+        available_layouts: vec![
+            LayoutInfo::File("layout 1".to_owned()),
+            LayoutInfo::BuiltIn("layout2".to_owned()),
+            LayoutInfo::File("layout3".to_owned()),
+        ],
+        plugins,
     };
     let session_info_2 = SessionInfo {
         name: "session 2".to_owned(),
@@ -1392,6 +1852,12 @@ fn serialize_session_update_event_with_non_default_values() {
         },
         connected_clients: 0,
         is_current_session: false,
+        available_layouts: vec![
+            LayoutInfo::File("layout 1".to_owned()),
+            LayoutInfo::BuiltIn("layout2".to_owned()),
+            LayoutInfo::File("layout3".to_owned()),
+        ],
+        plugins: Default::default(),
     };
     let session_infos = vec![session_info_1, session_info_2];
     let resurrectable_sessions = vec![];
@@ -1406,4 +1872,37 @@ fn serialize_session_update_event_with_non_default_values() {
         session_update_event, deserialized_event,
         "Event properly serialized/deserialized without change"
     );
+}
+
+// note: ProtobufPaneId and ProtobufPaneType are not the same as the ones defined in plugin_command.rs
+// this is a duplicate type - we are forced to do this because protobuffs do not support recursive
+// imports
+impl TryFrom<ProtobufPaneId> for PaneId {
+    type Error = &'static str;
+    fn try_from(protobuf_pane_id: ProtobufPaneId) -> Result<Self, &'static str> {
+        match ProtobufPaneType::from_i32(protobuf_pane_id.pane_type) {
+            Some(ProtobufPaneType::Terminal) => Ok(PaneId::Terminal(protobuf_pane_id.id)),
+            Some(ProtobufPaneType::Plugin) => Ok(PaneId::Plugin(protobuf_pane_id.id)),
+            None => Err("Failed to convert PaneId"),
+        }
+    }
+}
+
+// note: ProtobufPaneId and ProtobufPaneType are not the same as the ones defined in plugin_command.rs
+// this is a duplicate type - we are forced to do this because protobuffs do not support recursive
+// imports
+impl TryFrom<PaneId> for ProtobufPaneId {
+    type Error = &'static str;
+    fn try_from(pane_id: PaneId) -> Result<Self, &'static str> {
+        match pane_id {
+            PaneId::Terminal(id) => Ok(ProtobufPaneId {
+                pane_type: ProtobufPaneType::Terminal as i32,
+                id,
+            }),
+            PaneId::Plugin(id) => Ok(ProtobufPaneId {
+                pane_type: ProtobufPaneType::Plugin as i32,
+                id,
+            }),
+        }
+    }
 }

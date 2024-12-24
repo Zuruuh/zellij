@@ -2,8 +2,6 @@ use fuzzy_matcher::skim::SkimMatcherV2;
 use fuzzy_matcher::FuzzyMatcher;
 use humantime::format_duration;
 
-use crate::ui::components::render_resurrection_toggle;
-
 use std::time::Duration;
 
 use zellij_tile::shim::*;
@@ -23,24 +21,26 @@ impl ResurrectableSessions {
     pub fn update(&mut self, mut list: Vec<(String, Duration)>) {
         list.sort_by(|a, b| a.1.cmp(&b.1));
         self.all_resurrectable_sessions = list;
+        if self.is_searching {
+            self.update_search_term();
+        }
     }
-    pub fn render(&self, rows: usize, columns: usize) {
+    pub fn render(&self, rows: usize, columns: usize, x: usize, y: usize) {
         if self.delete_all_dead_sessions_warning {
-            self.render_delete_all_sessions_warning(rows, columns);
+            self.render_delete_all_sessions_warning(rows, columns, x, y);
             return;
         }
-        render_resurrection_toggle(columns, true);
-        let search_indication = Text::new(format!("> {}_", self.search_term)).color_range(1, ..);
-        let table_rows = rows.saturating_sub(3);
+        let search_indication =
+            Text::new(format!("Search: {}_", self.search_term)).color_range(2, ..7);
+        let table_rows = rows.saturating_sub(5); // search row, toggle row and some padding
         let table_columns = columns;
         let table = if self.is_searching {
             self.render_search_results(table_rows, columns)
         } else {
             self.render_all_entries(table_rows, columns)
         };
-        print_text_with_coordinates(search_indication, 0, 0, None, None);
-        print_table_with_coordinates(table, 0, 1, Some(table_columns), Some(table_rows));
-        self.render_controls_line(rows);
+        print_text_with_coordinates(search_indication, x.saturating_sub(1), y + 2, None, None);
+        print_table_with_coordinates(table, x, y + 3, Some(table_columns), Some(table_rows));
     }
     fn render_search_results(&self, table_rows: usize, _table_columns: usize) -> Table {
         let mut table = Table::new().add_row(vec![" ", " ", " "]); // skip the title row
@@ -103,7 +103,7 @@ impl ResurrectableSessions {
         }
         table
     }
-    fn render_delete_all_sessions_warning(&self, rows: usize, columns: usize) {
+    fn render_delete_all_sessions_warning(&self, rows: usize, columns: usize, x: usize, y: usize) {
         if rows == 0 || columns == 0 {
             return;
         }
@@ -112,11 +112,12 @@ impl ResurrectableSessions {
         let warning_description_text =
             format!("This will delete {} resurrectable sessions", session_count,);
         let confirmation_text = "Are you sure? (y/n)";
-        let warning_y_location = (rows / 2).saturating_sub(1);
-        let confirmation_y_location = (rows / 2) + 1;
+        let warning_y_location = y + (rows / 2).saturating_sub(1);
+        let confirmation_y_location = y + (rows / 2) + 1;
         let warning_x_location =
-            columns.saturating_sub(warning_description_text.chars().count()) / 2;
-        let confirmation_x_location = columns.saturating_sub(confirmation_text.chars().count()) / 2;
+            x + columns.saturating_sub(warning_description_text.chars().count()) / 2;
+        let confirmation_x_location =
+            x + columns.saturating_sub(confirmation_text.chars().count()) / 2;
         print_text_with_coordinates(
             Text::new(warning_description_text).color_range(0, 17..18 + session_count_len),
             warning_x_location,
@@ -200,15 +201,6 @@ impl ResurrectableSessions {
             Text::new(" ")
         }
     }
-    fn render_controls_line(&self, rows: usize) {
-        let controls_line = Text::new(format!(
-            "Help: <↓↑> - Navigate, <DEL> - Delete Session, <Ctrl d> - Delete all sessions"
-        ))
-        .color_range(3, 6..10)
-        .color_range(3, 23..29)
-        .color_range(3, 47..56);
-        print_text_with_coordinates(controls_line, 0, rows.saturating_sub(1), None, None);
-    }
     pub fn move_selection_down(&mut self) {
         if self.is_searching {
             if let Some(selected_index) = self.selected_search_index.as_mut() {
@@ -267,23 +259,29 @@ impl ResurrectableSessions {
         }
     }
     pub fn delete_selected_session(&mut self) {
-        self.selected_index
-            .and_then(|i| {
-                if self.all_resurrectable_sessions.len() > i {
-                    // optimistic update
-                    if i == 0 {
-                        self.selected_index = None;
-                    } else if i == self.all_resurrectable_sessions.len().saturating_sub(1) {
-                        self.selected_index = Some(i.saturating_sub(1));
+        if self.is_searching {
+            self.selected_search_index
+                .and_then(|i| self.search_results.get(i))
+                .map(|search_result| delete_dead_session(&search_result.session_name));
+        } else {
+            self.selected_index
+                .and_then(|i| {
+                    if self.all_resurrectable_sessions.len() > i {
+                        // optimistic update
+                        if i == 0 {
+                            self.selected_index = None;
+                        } else if i == self.all_resurrectable_sessions.len().saturating_sub(1) {
+                            self.selected_index = Some(i.saturating_sub(1));
+                        }
+                        Some(self.all_resurrectable_sessions.remove(i))
+                    } else {
+                        None
                     }
-                    Some(self.all_resurrectable_sessions.remove(i))
-                } else {
-                    None
-                }
-            })
-            .map(|session_name_and_creation_time| {
-                delete_dead_session(&session_name_and_creation_time.0)
-            });
+                })
+                .map(|session_name_and_creation_time| {
+                    delete_dead_session(&session_name_and_creation_time.0)
+                });
+        }
     }
     fn delete_all_sessions(&mut self) {
         // optimistic update
@@ -330,7 +328,18 @@ impl ResurrectableSessions {
         matches.sort_by(|a, b| b.score.cmp(&a.score));
         self.search_results = matches;
         self.is_searching = !self.search_term.is_empty();
-        self.selected_search_index = Some(0);
+        match self.selected_search_index {
+            Some(search_index) => {
+                if self.search_results.is_empty() {
+                    self.selected_search_index = None;
+                } else if search_index >= self.search_results.len() {
+                    self.selected_search_index = Some(self.search_results.len().saturating_sub(1));
+                }
+            },
+            None => {
+                self.selected_search_index = Some(0);
+            },
+        }
     }
 }
 

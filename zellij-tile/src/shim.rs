@@ -6,6 +6,7 @@ use std::{
 };
 use zellij_utils::data::*;
 use zellij_utils::errors::prelude::*;
+use zellij_utils::input::actions::Action;
 pub use zellij_utils::plugin_api;
 use zellij_utils::plugin_api::plugin_command::ProtobufPluginCommand;
 use zellij_utils::plugin_api::plugin_ids::{ProtobufPluginIds, ProtobufZellijVersion};
@@ -76,24 +77,28 @@ pub fn get_zellij_version() -> String {
 // Host Functions
 
 /// Open a file in the user's default `$EDITOR` in a new pane
-pub fn open_file(file_to_open: FileToOpen) {
-    let plugin_command = PluginCommand::OpenFile(file_to_open);
+pub fn open_file(file_to_open: FileToOpen, context: BTreeMap<String, String>) {
+    let plugin_command = PluginCommand::OpenFile(file_to_open, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
 }
 
 /// Open a file in the user's default `$EDITOR` in a new floating pane
-pub fn open_file_floating(file_to_open: FileToOpen) {
-    let plugin_command = PluginCommand::OpenFileFloating(file_to_open);
+pub fn open_file_floating(
+    file_to_open: FileToOpen,
+    coordinates: Option<FloatingPaneCoordinates>,
+    context: BTreeMap<String, String>,
+) {
+    let plugin_command = PluginCommand::OpenFileFloating(file_to_open, coordinates, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
 }
 
 /// Open a file in the user's default `$EDITOR`, replacing the focused pane
-pub fn open_file_in_place(file_to_open: FileToOpen) {
-    let plugin_command = PluginCommand::OpenFileInPlace(file_to_open);
+pub fn open_file_in_place(file_to_open: FileToOpen, context: BTreeMap<String, String>) {
+    let plugin_command = PluginCommand::OpenFileInPlace(file_to_open, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
@@ -109,9 +114,12 @@ pub fn open_terminal<P: AsRef<Path>>(path: P) {
 }
 
 /// Open a new floating terminal pane to the specified location on the host filesystem
-pub fn open_terminal_floating<P: AsRef<Path>>(path: P) {
+pub fn open_terminal_floating<P: AsRef<Path>>(
+    path: P,
+    coordinates: Option<FloatingPaneCoordinates>,
+) {
     let file_to_open = FileToOpen::new(path.as_ref().to_path_buf());
-    let plugin_command = PluginCommand::OpenTerminalFloating(file_to_open);
+    let plugin_command = PluginCommand::OpenTerminalFloating(file_to_open, coordinates);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
@@ -128,24 +136,40 @@ pub fn open_terminal_in_place<P: AsRef<Path>>(path: P) {
 }
 
 /// Open a new command pane with the specified command and args (this sort of pane allows the user to control the command, re-run it and see its exit status through the Zellij UI).
-pub fn open_command_pane(command_to_run: CommandToRun) {
-    let plugin_command = PluginCommand::OpenCommandPane(command_to_run);
+pub fn open_command_pane(command_to_run: CommandToRun, context: BTreeMap<String, String>) {
+    let plugin_command = PluginCommand::OpenCommandPane(command_to_run, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
 }
 
 /// Open a new floating command pane with the specified command and args (this sort of pane allows the user to control the command, re-run it and see its exit status through the Zellij UI).
-pub fn open_command_pane_floating(command_to_run: CommandToRun) {
-    let plugin_command = PluginCommand::OpenCommandPaneFloating(command_to_run);
+pub fn open_command_pane_floating(
+    command_to_run: CommandToRun,
+    coordinates: Option<FloatingPaneCoordinates>,
+    context: BTreeMap<String, String>,
+) {
+    let plugin_command =
+        PluginCommand::OpenCommandPaneFloating(command_to_run, coordinates, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
 }
 
-/// Open a new floating command pane with the specified command and args (this sort of pane allows the user to control the command, re-run it and see its exit status through the Zellij UI).
-pub fn open_command_pane_in_place(command_to_run: CommandToRun) {
-    let plugin_command = PluginCommand::OpenCommandPaneInPlace(command_to_run);
+/// Open a new in place command pane with the specified command and args (this sort of pane allows the user to control the command, re-run it and see its exit status through the Zellij UI).
+pub fn open_command_pane_in_place(command_to_run: CommandToRun, context: BTreeMap<String, String>) {
+    let plugin_command = PluginCommand::OpenCommandPaneInPlace(command_to_run, context);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Open a new hidden (background) command pane with the specified command and args (this sort of pane allows the user to control the command, re-run it and see its exit status through the Zellij UI).
+pub fn open_command_pane_background(
+    command_to_run: CommandToRun,
+    context: BTreeMap<String, String>,
+) {
+    let plugin_command = PluginCommand::OpenCommandPaneBackground(command_to_run, context);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
@@ -235,9 +259,33 @@ pub fn hide_self() {
     unsafe { host_run_plugin_command() };
 }
 
+/// Hide the pane (suppress it) with the specified [PaneId] from the UI
+pub fn hide_pane_with_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::HidePaneWithId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
 /// Show the plugin pane (unsuppress it if it is suppressed), focus it and switch to its tab
 pub fn show_self(should_float_if_hidden: bool) {
     let plugin_command = PluginCommand::ShowSelf(should_float_if_hidden);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Show the pane (unsuppress it if it is suppressed) with the specified [PaneId], focus it and switch to its tab
+pub fn show_pane_with_id(pane_id: PaneId, should_float_if_hidden: bool) {
+    let plugin_command = PluginCommand::ShowPaneWithId(pane_id, should_float_if_hidden);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Close this plugin pane
+pub fn close_self() {
+    let plugin_command = PluginCommand::CloseSelf;
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
@@ -254,6 +302,14 @@ pub fn switch_to_input_mode(mode: &InputMode) {
 /// Provide a stringified [`layout`](https://zellij.dev/documentation/layouts.html) to be applied to the current session. If the layout has multiple tabs, they will all be opened.
 pub fn new_tabs_with_layout(layout: &str) {
     let plugin_command = PluginCommand::NewTabsWithLayout(layout.to_owned());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Provide a LayoutInfo to be applied to the current session in a new tab. If the layout has multiple tabs, they will all be opened.
+pub fn new_tabs_with_layout_info(layout_info: LayoutInfo) {
+    let plugin_command = PluginCommand::NewTabsWithLayoutInfo(layout_info);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };
@@ -653,6 +709,31 @@ pub fn switch_session(name: Option<&str>) {
     unsafe { host_run_plugin_command() };
 }
 
+/// Switch to a session with the given name, create one if no name is given
+pub fn switch_session_with_layout(name: Option<&str>, layout: LayoutInfo, cwd: Option<PathBuf>) {
+    let plugin_command = PluginCommand::SwitchSession(ConnectToSession {
+        name: name.map(|n| n.to_string()),
+        layout: Some(layout),
+        cwd,
+        ..Default::default()
+    });
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Switch to a session with the given name, create one if no name is given
+pub fn switch_session_with_cwd(name: Option<&str>, cwd: Option<PathBuf>) {
+    let plugin_command = PluginCommand::SwitchSession(ConnectToSession {
+        name: name.map(|n| n.to_string()),
+        cwd,
+        ..Default::default()
+    });
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
 /// Switch to a session with the given name, focusing either the provided pane_id or the provided
 /// tab position (in that order)
 pub fn switch_session_with_focus(
@@ -664,6 +745,7 @@ pub fn switch_session_with_focus(
         name: Some(name.to_owned()),
         tab_position,
         pane_id,
+        ..Default::default()
     });
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
@@ -689,6 +771,372 @@ pub fn delete_all_dead_sessions() {
 /// Rename the current session
 pub fn rename_session(name: &str) {
     let plugin_command = PluginCommand::RenameSession(name.to_owned());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Unblock the input side of a pipe, requesting the next message be sent if there is one
+pub fn unblock_cli_pipe_input(pipe_name: &str) {
+    let plugin_command = PluginCommand::UnblockCliPipeInput(pipe_name.to_owned());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Block the input side of a pipe, will only be released once this or another plugin unblocks it
+pub fn block_cli_pipe_input(pipe_name: &str) {
+    let plugin_command = PluginCommand::BlockCliPipeInput(pipe_name.to_owned());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Send output to the output side of a pipe, ths does not affect the input side of same pipe
+pub fn cli_pipe_output(pipe_name: &str, output: &str) {
+    let plugin_command = PluginCommand::CliPipeOutput(pipe_name.to_owned(), output.to_owned());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Send a message to a plugin, it will be launched if it is not already running
+pub fn pipe_message_to_plugin(message_to_plugin: MessageToPlugin) {
+    let plugin_command = PluginCommand::MessageToPlugin(message_to_plugin);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Disconnect all other clients from the current session
+pub fn disconnect_other_clients() {
+    let plugin_command = PluginCommand::DisconnectOtherClients;
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Kill all Zellij sessions in the list
+pub fn kill_sessions<S: AsRef<str>>(session_names: &[S])
+where
+    S: ToString,
+{
+    let plugin_command =
+        PluginCommand::KillSessions(session_names.into_iter().map(|s| s.to_string()).collect());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scan a specific folder in the host filesystem (this is a hack around some WASI runtime performance
+/// issues), will not follow symlinks
+pub fn scan_host_folder<S: AsRef<Path>>(folder_to_scan: &S) {
+    let plugin_command = PluginCommand::ScanHostFolder(folder_to_scan.as_ref().to_path_buf());
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Start watching the host folder for filesystem changes (Note: somewhat unstable at the time
+/// being)
+pub fn watch_filesystem() {
+    let plugin_command = PluginCommand::WatchFilesystem;
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Get the serialized session layout in KDL format as a CustomMessage Event
+pub fn dump_session_layout() {
+    let plugin_command = PluginCommand::DumpSessionLayout;
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Get a list of clients, their focused pane and running command or focused plugin back as an
+/// Event::ListClients (note: this event must be subscribed to)
+pub fn list_clients() {
+    let plugin_command = PluginCommand::ListClients;
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Change configuration for the current user
+pub fn reconfigure(new_config: String, save_configuration_file: bool) {
+    let plugin_command = PluginCommand::Reconfigure(new_config, save_configuration_file);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Re-run command in pane
+pub fn rerun_command_pane(terminal_pane_id: u32) {
+    let plugin_command = PluginCommand::RerunCommandPane(terminal_pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Sugar for close_terminal_pane and close_plugin_pane
+pub fn close_pane_with_id(pane_id: PaneId) {
+    let plugin_command = match pane_id {
+        PaneId::Terminal(terminal_pane_id) => PluginCommand::CloseTerminalPane(terminal_pane_id),
+        PaneId::Plugin(plugin_pane_id) => PluginCommand::ClosePluginPane(plugin_pane_id),
+    };
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Resize the specified pane (increase/decrease) with an optional direction (left/right/up/down)
+pub fn resize_pane_with_id(resize_strategy: ResizeStrategy, pane_id: PaneId) {
+    let plugin_command = PluginCommand::ResizePaneIdWithDirection(resize_strategy, pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Changes the focus to the pane with the specified id, unsuppressing it if it was suppressed and switching to its tab and layer (eg. floating/tiled).
+pub fn focus_pane_with_id(pane_id: PaneId, should_float_if_hidden: bool) {
+    let plugin_command = match pane_id {
+        PaneId::Terminal(terminal_pane_id) => {
+            PluginCommand::FocusTerminalPane(terminal_pane_id, should_float_if_hidden)
+        },
+        PaneId::Plugin(plugin_pane_id) => {
+            PluginCommand::FocusPluginPane(plugin_pane_id, should_float_if_hidden)
+        },
+    };
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Edit the scrollback of the specified pane in the user's default `$EDITOR` (currently only works
+/// for terminal panes)
+pub fn edit_scrollback_for_pane_with_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::EditScrollbackForPaneWithId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Write bytes to the `STDIN` of the specified pane
+pub fn write_to_pane_id(bytes: Vec<u8>, pane_id: PaneId) {
+    let plugin_command = PluginCommand::WriteToPaneId(bytes, pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Write characters to the `STDIN` of the specified pane
+pub fn write_chars_to_pane_id(chars: &str, pane_id: PaneId) {
+    let plugin_command = PluginCommand::WriteCharsToPaneId(chars.to_owned(), pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Switch the position of the pane with this id with a different pane
+pub fn move_pane_with_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::MovePaneWithPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Switch the position of the pane with this id with a different pane in the specified direction (eg. `Down`, `Up`, `Left`, `Right`).
+pub fn move_pane_with_pane_id_in_direction(pane_id: PaneId, direction: Direction) {
+    let plugin_command = PluginCommand::MovePaneWithPaneIdInDirection(pane_id, direction);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Clear the scroll buffer of the specified pane
+pub fn clear_screen_for_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::ClearScreenForPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane up 1 line
+pub fn scroll_up_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::ScrollUpInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane down 1 line
+pub fn scroll_down_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::ScrollDownInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane all the way to the top of the scrollbuffer
+pub fn scroll_to_top_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::ScrollToTopInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane all the way to the bottom of the scrollbuffer
+pub fn scroll_to_bottom_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::ScrollToBottomInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane up one page
+pub fn page_scroll_up_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::PageScrollUpInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Scroll the specified pane down one page
+pub fn page_scroll_down_in_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::PageScrollDownInPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Toggle the specified pane to be fullscreen or normal sized
+pub fn toggle_pane_id_fullscreen(pane_id: PaneId) {
+    let plugin_command = PluginCommand::TogglePaneIdFullscreen(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Embed the specified pane (make it stop floating) or turn it to a float pane if it is not
+pub fn toggle_pane_embed_or_eject_for_pane_id(pane_id: PaneId) {
+    let plugin_command = PluginCommand::TogglePaneEmbedOrEjectForPaneId(pane_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Close the focused tab
+pub fn close_tab_with_index(tab_index: usize) {
+    let plugin_command = PluginCommand::CloseTabWithIndex(tab_index);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Rename the specified pane
+pub fn rename_pane_with_id<S: AsRef<str>>(pane_id: PaneId, new_name: S)
+where
+    S: ToString,
+{
+    let plugin_command = match pane_id {
+        PaneId::Terminal(terminal_pane_id) => {
+            PluginCommand::RenameTerminalPane(terminal_pane_id, new_name.to_string())
+        },
+        PaneId::Plugin(plugin_pane_id) => {
+            PluginCommand::RenamePluginPane(plugin_pane_id, new_name.to_string())
+        },
+    };
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Create a new tab that includes the specified pane ids
+pub fn break_panes_to_new_tab(
+    pane_ids: &[PaneId],
+    new_tab_name: Option<String>,
+    should_change_focus_to_new_tab: bool,
+) {
+    let plugin_command = PluginCommand::BreakPanesToNewTab(
+        pane_ids.to_vec(),
+        new_tab_name,
+        should_change_focus_to_new_tab,
+    );
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Create a new tab that includes the specified pane ids
+pub fn break_panes_to_tab_with_index(
+    pane_ids: &[PaneId],
+    tab_index: usize,
+    should_change_focus_to_new_tab: bool,
+) {
+    let plugin_command = PluginCommand::BreakPanesToTabWithIndex(
+        pane_ids.to_vec(),
+        tab_index,
+        should_change_focus_to_new_tab,
+    );
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Reload an already-running in this session, optionally skipping the cache
+pub fn reload_plugin_with_id(plugin_id: u32) {
+    let plugin_command = PluginCommand::ReloadPlugin(plugin_id);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Reload an already-running in this session, optionally skipping the cache
+pub fn load_new_plugin<S: AsRef<str>>(
+    url: S,
+    config: BTreeMap<String, String>,
+    load_in_background: bool,
+    skip_plugin_cache: bool,
+) where
+    S: ToString,
+{
+    let plugin_command = PluginCommand::LoadNewPlugin {
+        url: url.to_string(),
+        config,
+        load_in_background,
+        skip_plugin_cache,
+    };
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+/// Rebind keys for the current user
+pub fn rebind_keys(
+    keys_to_unbind: Vec<(InputMode, KeyWithModifier)>,
+    keys_to_rebind: Vec<(InputMode, KeyWithModifier, Vec<Action>)>,
+    write_config_to_disk: bool,
+) {
+    let plugin_command = PluginCommand::RebindKeys {
+        keys_to_rebind,
+        keys_to_unbind,
+        write_config_to_disk,
+    };
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+pub fn change_host_folder(new_host_folder: PathBuf) {
+    let plugin_command = PluginCommand::ChangeHostFolder(new_host_folder);
+    let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
+    object_to_stdout(&protobuf_plugin_command.encode_to_vec());
+    unsafe { host_run_plugin_command() };
+}
+
+pub fn set_floating_pane_pinned(pane_id: PaneId, should_be_pinned: bool) {
+    let plugin_command = PluginCommand::SetFloatingPanePinned(pane_id, should_be_pinned);
     let protobuf_plugin_command: ProtobufPluginCommand = plugin_command.try_into().unwrap();
     object_to_stdout(&protobuf_plugin_command.encode_to_vec());
     unsafe { host_run_plugin_command() };

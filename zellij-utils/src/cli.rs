@@ -53,8 +53,15 @@ pub struct CliArgs {
     pub session: Option<String>,
 
     /// Name of a predefined layout inside the layout directory or the path to a layout file
+    /// if inside a session (or using the --session flag) will be added to the session as a new tab
+    /// or tabs, otherwise will start a new session
     #[clap(short, long, value_parser, overrides_with = "layout")]
     pub layout: Option<PathBuf>,
+
+    /// Name of a predefined layout inside the layout directory or the path to a layout file
+    /// Will always start a new session, even if inside an existing session
+    #[clap(short, long, value_parser, overrides_with = "new_session_with_layout")]
+    pub new_session_with_layout: Option<PathBuf>,
 
     /// Change where zellij looks for the configuration file
     #[clap(short, long, overrides_with = "config", env = ZELLIJ_CONFIG_FILE_ENV, value_parser)]
@@ -106,8 +113,18 @@ pub enum Sessions {
         /// Print just the session name
         #[clap(short, long, value_parser, num_args(0), default_value("false"))]
         short: bool,
-    },
 
+        /// List the sessions in reverse order (default is ascending order)
+        #[clap(short, long, value_parser, num_args(false), default_value("false"))]
+        short: bool,
+
+        /// List the sessions in reverse order (default is ascending order)
+        #[clap(short, long, value_parser, num_args(false), default_value("false"))]
+        reverse: bool,
+    },
+    /// List existing plugin aliases
+    #[clap(visible_alias = "la")]
+    ListAliases,
     /// Attach to a session
     #[clap(visible_alias = "a")]
     Attach {
@@ -118,6 +135,10 @@ pub enum Sessions {
         /// Create a session if one does not exist.
         #[clap(short, long, value_parser)]
         create: bool,
+
+        /// Create a detached session in the background if one does not exist
+        #[clap(short('b'), long, value_parser)]
+        create_background: bool,
 
         /// Number of the session index in the active sessions ordered creation date.
         #[clap(long, value_parser)]
@@ -216,8 +237,25 @@ pub enum Sessions {
         /// Start the command suspended, only running after you first presses ENTER
         #[clap(short, long, value_parser, default_value("false"), num_args(0))]
         start_suspended: bool,
+
+        /// The x coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        x: Option<String>,
+        /// The y coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        y: Option<String>,
+        /// The width if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        width: Option<String>,
+        /// The height if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        height: Option<String>,
+        /// Whether to pin a floating pane so that it is always on top
+        #[clap(long, requires("floating"))]
+        pinned: Option<bool>,
     },
     /// Load a plugin
+    #[clap(visible_alias = "p")]
     Plugin {
         /// Plugin URL, can either start with http(s), file: or zellij:
         #[clap(last(true), required(true))]
@@ -240,6 +278,25 @@ pub enum Sessions {
             conflicts_with("floating")
         )]
         in_place: bool,
+
+        /// Skip the memory and HD cache and force recompile of the plugin (good for development)
+        #[clap(short, long, value_parser, default_value("false"), takes_value(false))]
+        skip_plugin_cache: bool,
+        /// The x coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        x: Option<String>,
+        /// The y coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        y: Option<String>,
+        /// The width if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        width: Option<String>,
+        /// The height if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        height: Option<String>,
+        /// Whether to pin a floating pane so that it is always on top
+        #[clap(long, requires("floating"))]
+        pinned: Option<bool>,
     },
     /// Edit file with default $EDITOR / $VISUAL
     #[clap(visible_alias = "e")]
@@ -273,6 +330,21 @@ pub enum Sessions {
         /// Change the working directory of the editor
         #[clap(long, value_parser)]
         cwd: Option<PathBuf>,
+        /// The x coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        x: Option<String>,
+        /// The y coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        y: Option<String>,
+        /// The width if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        width: Option<String>,
+        /// The height if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        height: Option<String>,
+        /// Whether to pin a floating pane so that it is always on top
+        #[clap(long, requires("floating"))]
+        pinned: Option<bool>,
     },
     ConvertConfig {
         old_config_file: PathBuf,
@@ -282,6 +354,43 @@ pub enum Sessions {
     },
     ConvertTheme {
         old_theme_file: PathBuf,
+    },
+    /// Send data to one or more plugins, launch them if they are not running.
+    #[clap(override_usage(
+r#"
+zellij pipe [OPTIONS] [--] <PAYLOAD>
+
+* Send data to a specific plugin:
+
+zellij pipe --plugin file:/path/to/my/plugin.wasm --name my_pipe_name -- my_arbitrary_data
+
+* To all running plugins (that are listening):
+
+zellij pipe --name my_pipe_name -- my_arbitrary_data
+
+* Pipe data into this command's STDIN and get output from the plugin on this command's STDOUT
+
+tail -f /tmp/my-live-logfile | zellij pipe --name logs --plugin https://example.com/my-plugin.wasm | wc -l
+"#))]
+    Pipe {
+        /// The name of the pipe
+        #[clap(short, long, value_parser, display_order(1))]
+        name: Option<String>,
+        /// The data to send down this pipe (if blank, will listen to STDIN)
+        payload: Option<String>,
+
+        #[clap(short, long, value_parser, display_order(2))]
+        /// The args of the pipe
+        args: Option<PluginUserConfiguration>, // TODO: we might want to not re-use
+        // PluginUserConfiguration
+        /// The plugin url (eg. file:/tmp/my-plugin.wasm) to direct this pipe to, if not specified,
+        /// will be sent to all plugins, if specified and is not running, the plugin will be launched
+        #[clap(short, long, value_parser, display_order(3))]
+        plugin: Option<String>,
+        /// The plugin configuration (note: the same plugin with different configuration is
+        /// considered a different plugin for the purposes of determining the pipe destination)
+        #[clap(short('c'), long, value_parser, display_order(4))]
+        plugin_configuration: Option<PluginUserConfiguration>,
     },
 }
 
@@ -415,6 +524,23 @@ pub enum CliAction {
         start_suspended: bool,
         #[clap(long, value_parser)]
         configuration: Option<PluginUserConfiguration>,
+        #[clap(long, value_parser)]
+        skip_plugin_cache: bool,
+        /// The x coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        x: Option<String>,
+        /// The y coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        y: Option<String>,
+        /// The width if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        width: Option<String>,
+        /// The height if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        height: Option<String>,
+        /// Whether to pin a floating pane so that it is always on top
+        #[clap(long, requires("floating"))]
+        pinned: Option<bool>,
     },
     /// Open the specified file in a new zellij pane with your default EDITOR
     Edit {
@@ -447,6 +573,21 @@ pub enum CliAction {
         /// Change the working directory of the editor
         #[clap(long, value_parser)]
         cwd: Option<PathBuf>,
+        /// The x coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        x: Option<String>,
+        /// The y coordinates if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(short, long, requires("floating"))]
+        y: Option<String>,
+        /// The width if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        width: Option<String>,
+        /// The height if the pane is floating as a bare integer (eg. 1) or percent (eg. 10%)
+        #[clap(long, requires("floating"))]
+        height: Option<String>,
+        /// Whether to pin a floating pane so that it is always on top
+        #[clap(long, requires("floating"))]
+        pinned: Option<bool>,
     },
     /// Switch input mode of all connected clients [locked|pane|tab|resize|move|search|session]
     SwitchMode {
@@ -505,6 +646,10 @@ pub enum CliAction {
         #[clap(short, long, value_parser, requires("layout"))]
         cwd: Option<PathBuf>,
     },
+    /// Move the focused tab in the specified direction. [right|left]
+    MoveTab {
+        direction: Direction,
+    },
     PreviousSwapLayout,
     NextSwapLayout,
     /// Query all tab names
@@ -521,9 +666,11 @@ pub enum CliAction {
         in_place: bool,
         #[clap(short, long, value_parser)]
         move_to_focused_tab: bool,
-        url: Url,
+        url: String,
         #[clap(short, long, value_parser)]
         configuration: Option<PluginUserConfiguration>,
+        #[clap(short, long, value_parser)]
+        skip_plugin_cache: bool,
     },
     LaunchPlugin {
         #[clap(short, long, value_parser)]
@@ -533,8 +680,87 @@ pub enum CliAction {
         url: Url,
         #[clap(short, long, value_parser)]
         configuration: Option<PluginUserConfiguration>,
+        #[clap(short, long, value_parser)]
+        skip_plugin_cache: bool,
     },
     RenameSession {
         name: String,
     },
+    /// Send data to one or more plugins, launch them if they are not running.
+    #[clap(override_usage(
+r#"
+zellij action pipe [OPTIONS] [--] <PAYLOAD>
+
+* Send data to a specific plugin:
+
+zellij action pipe --plugin file:/path/to/my/plugin.wasm --name my_pipe_name -- my_arbitrary_data
+
+* To all running plugins (that are listening):
+
+zellij action pipe --name my_pipe_name -- my_arbitrary_data
+
+* Pipe data into this command's STDIN and get output from the plugin on this command's STDOUT
+
+tail -f /tmp/my-live-logfile | zellij action pipe --name logs --plugin https://example.com/my-plugin.wasm | wc -l
+"#))]
+    Pipe {
+        /// The name of the pipe
+        #[clap(short, long, value_parser, display_order(1))]
+        name: Option<String>,
+        /// The data to send down this pipe (if blank, will listen to STDIN)
+        payload: Option<String>,
+
+        #[clap(short, long, value_parser, display_order(2))]
+        /// The args of the pipe
+        args: Option<PluginUserConfiguration>, // TODO: we might want to not re-use
+        // PluginUserConfiguration
+        /// The plugin url (eg. file:/tmp/my-plugin.wasm) to direct this pipe to, if not specified,
+        /// will be sent to all plugins, if specified and is not running, the plugin will be launched
+        #[clap(short, long, value_parser, display_order(3))]
+        plugin: Option<String>,
+        /// The plugin configuration (note: the same plugin with different configuration is
+        /// considered a different plugin for the purposes of determining the pipe destination)
+        #[clap(short('c'), long, value_parser, display_order(4))]
+        plugin_configuration: Option<PluginUserConfiguration>,
+        /// Launch a new plugin even if one is already running
+        #[clap(
+            short('l'),
+            long,
+            value_parser,
+            takes_value(false),
+            default_value("false"),
+            display_order(5)
+        )]
+        force_launch_plugin: bool,
+        /// If launching a new plugin, skip cache and force-compile the plugin
+        #[clap(
+            short('s'),
+            long,
+            value_parser,
+            takes_value(false),
+            default_value("false"),
+            display_order(6)
+        )]
+        skip_plugin_cache: bool,
+        /// If launching a plugin, should it be floating or not, defaults to floating
+        #[clap(short('f'), long, value_parser, display_order(7))]
+        floating_plugin: Option<bool>,
+        /// If launching a plugin, launch it in-place (on top of the current pane)
+        #[clap(
+            short('i'),
+            long,
+            value_parser,
+            conflicts_with("floating-plugin"),
+            display_order(8)
+        )]
+        in_place_plugin: Option<bool>,
+        /// If launching a plugin, specify its working directory
+        #[clap(short('w'), long, value_parser, display_order(9))]
+        plugin_cwd: Option<PathBuf>,
+        /// If launching a plugin, specify its pane title
+        #[clap(short('t'), long, value_parser, display_order(10))]
+        plugin_title: Option<String>,
+    },
+    ListClients,
+    TogglePanePinned,
 }

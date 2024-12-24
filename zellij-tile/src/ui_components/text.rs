@@ -5,6 +5,7 @@ use std::ops::RangeBounds;
 pub struct Text {
     text: String,
     selected: bool,
+    opaque: bool,
     indices: Vec<Vec<usize>>,
 }
 
@@ -16,11 +17,16 @@ impl Text {
         Text {
             text: content.to_string(),
             selected: false,
+            opaque: false,
             indices: vec![],
         }
     }
     pub fn selected(mut self) -> Self {
         self.selected = true;
+        self
+    }
+    pub fn opaque(mut self) -> Self {
+        self.opaque = true;
         self
     }
     pub fn color_indices(mut self, index_level: usize, mut indices: Vec<usize>) -> Self {
@@ -75,11 +81,18 @@ impl Text {
                     .join(",")
             ));
         }
-        if self.selected {
-            format!("x{}{}", indices, text)
-        } else {
-            format!("{}{}", indices, text)
+
+        let mut prefix = "".to_owned();
+
+        if self.opaque {
+            prefix = format!("z{}", prefix);
         }
+
+        if self.selected {
+            prefix = format!("x{}", prefix);
+        }
+
+        format!("{}{}{}", prefix, indices, text)
     }
 }
 
@@ -97,6 +110,29 @@ pub fn print_text_with_coordinates(
     let width = width.map(|w| w.to_string()).unwrap_or_default();
     let height = height.map(|h| h.to_string()).unwrap_or_default();
     print!(
+        "\u{1b}Pztext;{}/{}/{}/{};{}\u{1b}\\",
+        x,
+        y,
+        width,
+        height,
+        text.serialize()
+    )
+}
+
+pub fn serialize_text(text: &Text) -> String {
+    format!("\u{1b}Pztext;{}\u{1b}\\", text.serialize())
+}
+
+pub fn serialize_text_with_coordinates(
+    text: &Text,
+    x: usize,
+    y: usize,
+    width: Option<usize>,
+    height: Option<usize>,
+) -> String {
+    let width = width.map(|w| w.to_string()).unwrap_or_default();
+    let height = height.map(|h| h.to_string()).unwrap_or_default();
+    format!(
         "\u{1b}Pztext;{}/{}/{}/{};{}\u{1b}\\",
         x,
         y,

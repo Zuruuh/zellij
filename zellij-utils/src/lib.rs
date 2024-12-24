@@ -20,6 +20,8 @@ pub mod windows_utils;
 #[cfg(not(target_family = "wasm"))]
 pub mod channels; // Requires async_std
 #[cfg(not(target_family = "wasm"))]
+pub mod common_path;
+#[cfg(not(target_family = "wasm"))]
 pub mod downloader; // Requires async_std
 #[cfg(not(target_family = "wasm"))]
 pub mod ipc; // Requires interprocess
@@ -28,8 +30,8 @@ pub mod logging; // Requires log4rs
 
 #[cfg(not(target_family = "wasm"))]
 pub use ::{
-    anyhow, async_channel, async_std, clap, common_path, humantime, interprocess, lazy_static,
-    miette, notify_debouncer_full, regex, serde, signal_hook, surf, tempfile, termwiz, vte,
+    anyhow, async_channel, async_std, clap, humantime, interprocess, isahc, lazy_static,
+    miette, notify_debouncer_full, regex, serde, signal_hook, tempfile, termwiz, url, uuid, vte,
 };
 
 pub use ::prost;

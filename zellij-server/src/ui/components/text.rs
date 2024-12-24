@@ -1,6 +1,6 @@
 use super::{
     emphasis_variants_for_ribbon, emphasis_variants_for_selected_ribbon, is_too_wide,
-    parse_indices, parse_selected, Coordinates,
+    parse_indices, parse_opaque, parse_selected, Coordinates,
 };
 use crate::panes::terminal_character::{AnsiCode, CharacterStyles, RESET_STYLES};
 use zellij_utils::{
@@ -12,12 +12,23 @@ use unicode_width::UnicodeWidthChar;
 use zellij_utils::errors::prelude::*;
 
 pub fn text(content: Text, style: &Style, component_coordinates: Option<Coordinates>) -> Vec<u8> {
-    let mut text_style = RESET_STYLES.bold(Some(AnsiCode::On));
+    let mut text_style = RESET_STYLES
+        .bold(Some(AnsiCode::On))
+        .foreground(Some(style.colors.white.into()));
+
     if content.selected {
         text_style = text_style.background(Some(style.colors.bg.into()));
+    } else if content.opaque {
+        text_style = text_style.background(Some(style.colors.black.into()));
     }
-    let (text, _text_width) =
-        stringify_text(&content, None, &component_coordinates, style, text_style);
+    let (text, _text_width) = stringify_text(
+        &content,
+        None,
+        &component_coordinates,
+        style,
+        text_style,
+        content.selected,
+    );
     match component_coordinates {
         Some(component_coordinates) => format!("{}{}{}", component_coordinates, text_style, text)
             .as_bytes()
@@ -32,6 +43,7 @@ pub fn stringify_text(
     coordinates: &Option<Coordinates>,
     style: &Style,
     text_style: CharacterStyles,
+    is_selected: bool,
 ) -> (String, usize) {
     let mut text_width = 0;
     let mut stringified = String::new();
@@ -47,11 +59,30 @@ pub fn stringify_text(
         text_width += character_width;
         if !text.indices.is_empty() {
             let character_with_styling =
-                color_index_character(character, i, &text, style, text_style);
+                color_index_character(character, i, &text, style, text_style, is_selected);
             stringified.push_str(&character_with_styling);
         } else {
             stringified.push(character);
         }
+    }
+    let coordinates_width = coordinates.as_ref().and_then(|c| c.width);
+    match (coordinates_width, text_style.background) {
+        (Some(coordinates_width), Some(_background_style)) => {
+            let text_width_with_left_padding = text_width + left_padding.unwrap_or(0);
+            let background_padding_length =
+                coordinates_width.saturating_sub(text_width_with_left_padding);
+            if text_width_with_left_padding < coordinates_width {
+                // here we pad the string with whitespace until the end so that the background
+                // style will apply the whole length of the coordinates
+                stringified.push_str(&format!(
+                    "{:width$}",
+                    " ",
+                    width = background_padding_length
+                ));
+            }
+            text_width += background_padding_length;
+        },
+        _ => {},
     }
     (stringified, text_width)
 }
@@ -62,10 +93,17 @@ pub fn color_index_character(
     text: &Text,
     style: &Style,
     base_text_style: CharacterStyles,
+    is_selected: bool,
 ) -> String {
     let character_style = text
         .style_of_index(index, style)
-        .map(|foreground_style| base_text_style.foreground(Some(foreground_style.into())))
+        .map(|foreground_style| {
+            let mut character_style = base_text_style.foreground(Some(foreground_style.into()));
+            if is_selected {
+                character_style = character_style.background(Some(style.colors.bg.into()));
+            };
+            character_style
+        })
         .unwrap_or(base_text_style);
     format!("{}{}{}", character_style, character, base_text_style)
 }
@@ -83,10 +121,12 @@ pub fn parse_text_params<'a>(params_iter: impl Iterator<Item = &'a mut String>) 
     params_iter
         .flat_map(|mut stringified| {
             let selected = parse_selected(&mut stringified);
+            let opaque = parse_opaque(&mut stringified);
             let indices = parse_indices(&mut stringified);
             let text = parse_text(&mut stringified).map_err(|e| e.to_string())?;
             Ok::<Text, String>(Text {
                 text,
+                opaque,
                 selected,
                 indices,
             })
@@ -98,6 +138,7 @@ pub fn parse_text_params<'a>(params_iter: impl Iterator<Item = &'a mut String>) 
 pub struct Text {
     pub text: String,
     pub selected: bool,
+    pub opaque: bool,
     pub indices: Vec<Vec<usize>>,
 }
 

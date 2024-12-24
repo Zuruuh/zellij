@@ -7,6 +7,8 @@ import "command.proto";
 import "message.proto";
 import "resize.proto";
 import "plugin_permission.proto";
+import "input_mode.proto";
+import "key.proto";
 
 package api.plugin_command;
 
@@ -87,6 +89,46 @@ enum CommandName {
   DeleteDeadSession = 73;
   DeleteAllDeadSessions = 74;
   RenameSession = 75;
+  UnblockCliPipeInput = 76;
+  BlockCliPipeInput = 77;
+  CliPipeOutput = 78;
+  MessageToPlugin = 79;
+  DisconnectOtherClients = 80;
+  KillSessions = 81;
+  ScanHostFolder = 82;
+  WatchFilesystem = 83;
+  DumpSessionLayout = 84;
+  CloseSelf = 85;
+  NewTabsWithLayoutInfo = 86;
+  Reconfigure = 87;
+  HidePaneWithId = 88;
+  ShowPaneWithId = 89;
+  OpenCommandPaneBackground = 90;
+  RerunCommandPane = 91;
+  ResizePaneIdWithDirection = 92;
+  EditScrollbackForPaneWithId = 93;
+  WriteToPaneId = 94;
+  WriteCharsToPaneId = 95;
+  MovePaneWithPaneId = 96;
+  MovePaneWithPaneIdInDirection = 97;
+  ClearScreenForPaneId = 98;
+  ScrollUpInPaneId = 99;
+  ScrollDownInPaneId = 100;
+  ScrollToTopInPaneId = 101;
+  ScrollToBottomInPaneId = 102;
+  PageScrollUpInPaneId = 103;
+  PageScrollDownInPaneId = 104;
+  TogglePaneIdFullscreen = 105;
+  TogglePaneEmbedOrEjectForPaneId = 106;
+  CloseTabWithIndex = 107;
+  BreakPanesToNewTab = 108;
+  BreakPanesToTabWithIndex = 109;
+  ReloadPlugin = 110;
+  LoadNewPlugin = 111;
+  RebindKeys = 112;
+  ListClients = 113;
+  ChangeHostFolder = 114;
+  SetFloatingPanePinned = 115;
 }
 
 message PluginCommand {
@@ -137,7 +179,218 @@ message PluginCommand {
     WebRequestPayload web_request_payload = 44;
     string delete_dead_session_payload = 45;
     string rename_session_payload = 46;
+    string unblock_cli_pipe_input_payload = 47;
+    string block_cli_pipe_input_payload = 48;
+    CliPipeOutputPayload cli_pipe_output_payload = 49;
+    MessageToPluginPayload message_to_plugin_payload = 50;
+    KillSessionsPayload kill_sessions_payload = 60;
+    string scan_host_folder_payload = 61;
+    NewTabsWithLayoutInfoPayload new_tabs_with_layout_info_payload = 62;
+    ReconfigurePayload reconfigure_payload = 63;
+    HidePaneWithIdPayload hide_pane_with_id_payload = 64;
+    ShowPaneWithIdPayload show_pane_with_id_payload = 65;
+    OpenCommandPanePayload open_command_pane_background_payload = 66;
+    RerunCommandPanePayload rerun_command_pane_payload = 67;
+    ResizePaneIdWithDirectionPayload resize_pane_id_with_direction_payload = 68;
+    EditScrollbackForPaneWithIdPayload edit_scrollback_for_pane_with_id_payload = 69;
+    WriteToPaneIdPayload write_to_pane_id_payload = 70;
+    WriteCharsToPaneIdPayload write_chars_to_pane_id_payload = 71;
+    MovePaneWithPaneIdPayload move_pane_with_pane_id_payload = 72;
+    MovePaneWithPaneIdInDirectionPayload move_pane_with_pane_id_in_direction_payload = 73;
+    ClearScreenForPaneIdPayload clear_screen_for_pane_id_payload = 74;
+    ScrollUpInPaneIdPayload scroll_up_in_pane_id_payload = 75;
+    ScrollDownInPaneIdPayload scroll_down_in_pane_id_payload = 76;
+    ScrollToTopInPaneIdPayload scroll_to_top_in_pane_id_payload = 77;
+    ScrollToBottomInPaneIdPayload scroll_to_bottom_in_pane_id_payload = 78;
+    PageScrollUpInPaneIdPayload page_scroll_up_in_pane_id_payload = 79;
+    PageScrollDownInPaneIdPayload page_scroll_down_in_pane_id_payload = 80;
+    TogglePaneIdFullscreenPayload toggle_pane_id_fullscreen_payload = 81;
+    TogglePaneEmbedOrEjectForPaneIdPayload toggle_pane_embed_or_eject_for_pane_id_payload = 82;
+    CloseTabWithIndexPayload close_tab_with_index_payload = 83;
+    BreakPanesToNewTabPayload break_panes_to_new_tab_payload = 84;
+    BreakPanesToTabWithIndexPayload break_panes_to_tab_with_index_payload = 85;
+    ReloadPluginPayload reload_plugin_payload = 86;
+    LoadNewPluginPayload load_new_plugin_payload = 87;
+    RebindKeysPayload rebind_keys_payload = 88;
+    ChangeHostFolderPayload change_host_folder_payload = 89;
+    SetFloatingPanePinnedPayload set_floating_pane_pinned_payload = 90;
   }
+}
+
+message SetFloatingPanePinnedPayload {
+  PaneId pane_id = 1;
+  bool should_be_pinned = 2;
+}
+
+message ChangeHostFolderPayload {
+  string new_host_folder = 1;
+}
+
+message RebindKeysPayload {
+  repeated KeyToRebind keys_to_rebind = 1;
+  repeated KeyToUnbind keys_to_unbind = 2;
+  bool write_config_to_disk = 3;
+}
+
+message KeyToRebind {
+  input_mode.InputMode input_mode = 1;
+  key.Key key = 2;
+  repeated action.Action actions = 3;
+}
+
+message KeyToUnbind {
+  input_mode.InputMode input_mode = 1;
+  key.Key key = 2;
+}
+
+message LoadNewPluginPayload {
+  string plugin_url = 1;
+  repeated ContextItem plugin_config = 2;
+  bool should_load_plugin_in_background = 3;
+  bool should_skip_plugin_cache = 4;
+}
+
+message ReloadPluginPayload {
+  uint32 plugin_id = 1;
+}
+
+message BreakPanesToTabWithIndexPayload {
+  repeated PaneId pane_ids = 1;
+  uint32 tab_index = 2;
+  bool should_change_focus_to_target_tab = 3;
+}
+
+message BreakPanesToNewTabPayload {
+  repeated PaneId pane_ids = 1;
+  bool should_change_focus_to_new_tab = 2;
+  optional string new_tab_name = 3;
+}
+
+message MovePaneWithPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message MovePaneWithPaneIdInDirectionPayload {
+  PaneId pane_id = 1;
+  resize.MoveDirection direction = 2;
+}
+
+message ClearScreenForPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ScrollUpInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ScrollDownInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ScrollToTopInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ScrollToBottomInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message PageScrollUpInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message PageScrollDownInPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message TogglePaneIdFullscreenPayload {
+  PaneId pane_id = 1;
+}
+
+message TogglePaneEmbedOrEjectForPaneIdPayload {
+  PaneId pane_id = 1;
+}
+
+message CloseTabWithIndexPayload {
+  uint32 tab_index = 1;
+}
+
+message WriteCharsToPaneIdPayload {
+  string chars_to_write = 1;
+  PaneId pane_id = 2;
+}
+
+message WriteToPaneIdPayload {
+  bytes bytes_to_write = 1;
+  PaneId pane_id = 2;
+}
+
+message EditScrollbackForPaneWithIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ResizePaneIdWithDirectionPayload {
+  resize.Resize resize = 1;
+  PaneId pane_id = 2;
+}
+
+message ReconfigurePayload {
+  string config = 1;
+  bool write_to_disk = 2;
+}
+
+message RerunCommandPanePayload {
+  uint32 terminal_pane_id = 1;
+}
+
+message HidePaneWithIdPayload {
+  PaneId pane_id = 1;
+}
+
+message ShowPaneWithIdPayload {
+  PaneId pane_id = 1;
+  bool should_float_if_hidden = 2;
+}
+
+message NewTabsWithLayoutInfoPayload {
+  event.LayoutInfo layout_info = 1;
+}
+
+message KillSessionsPayload {
+  repeated string session_names = 1;
+}
+
+message CliPipeOutputPayload {
+  string pipe_name = 1;
+  string output = 2;
+}
+
+message MessageToPluginPayload {
+  optional string plugin_url = 1;
+  repeated ContextItem plugin_config = 2;
+  string message_name = 3;
+  optional string message_payload = 4;
+  repeated ContextItem message_args = 5;
+  optional NewPluginArgs new_plugin_args = 6;
+  optional uint32 destination_plugin_id = 7;
+}
+
+message NewPluginArgs {
+    optional bool should_float = 1;
+    optional PaneId pane_id_to_replace = 2;
+    optional string pane_title = 3;
+    optional string cwd = 4;
+    bool skip_cache = 5;
+}
+
+message PaneId {
+  PaneType pane_type = 1;
+  uint32 id = 2;
+}
+
+enum PaneType {
+  Terminal = 0;
+  Plugin = 1;
 }
 
 message SwitchSessionPayload {
@@ -145,6 +398,8 @@ message SwitchSessionPayload {
   optional uint32 tab_position = 2;
   optional uint32 pane_id = 3;
   optional bool pane_id_is_plugin = 4;
+  optional event.LayoutInfo layout = 5;
+  optional string cwd = 6;
 }
 
 message RequestPluginPermissionPayload {
@@ -161,10 +416,14 @@ message UnsubscribePayload {
 
 message OpenFilePayload {
   file.File file_to_open = 1;
+  optional FloatingPaneCoordinates floating_pane_coordinates = 2;
+  repeated ContextItem context = 3;
 }
 
 message OpenCommandPanePayload {
   command.Command command_to_run = 1;
+  optional FloatingPaneCoordinates floating_pane_coordinates = 2;
+  repeated ContextItem context = 3;
 }
 
 message SwitchTabToPayload {
@@ -226,4 +485,22 @@ message MovePayload {
 message IdAndNewName {
   uint32 id = 1; // pane id or tab index
   string new_name = 2;
+}
+
+message FloatingPaneCoordinates {
+  optional FixedOrPercentValue x = 1;
+  optional FixedOrPercentValue y = 2;
+  optional FixedOrPercentValue width = 3;
+  optional FixedOrPercentValue height = 4;
+  optional bool pinned = 5;
+}
+
+message FixedOrPercentValue {
+  FixedOrPercent type = 1;
+  uint32 value = 2;
+}
+
+enum FixedOrPercent {
+  Fixed = 0;
+  Percent = 1;
 }

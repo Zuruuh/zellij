@@ -1,12 +1,17 @@
 use crate::panes::PaneId;
-use std::collections::HashMap;
+use crate::ClientId;
+use std::collections::{BTreeMap, HashMap};
 use std::path::PathBuf;
 use zellij_utils::common_path::common_path_all;
 use zellij_utils::pane_size::PaneGeom;
 use zellij_utils::{
     input::command::RunCommand,
-    input::layout::{Layout, Run, RunPlugin},
-    session_serialization::{GlobalLayoutManifest, PaneLayoutManifest, TabLayoutManifest},
+    input::layout::{Layout, Run, RunPlugin, RunPluginOrAlias},
+    input::plugins::PluginAliases,
+    session_serialization::{
+        extract_command_and_args, extract_edit_and_line_number, extract_plugin_and_config,
+        GlobalLayoutManifest, PaneLayoutManifest, TabLayoutManifest,
+    },
 };
 
 #[derive(Default, Debug, Clone)]
@@ -14,6 +19,7 @@ pub struct SessionLayoutMetadata {
     default_layout: Box<Layout>,
     global_cwd: Option<PathBuf>,
     pub default_shell: Option<PathBuf>,
+    pub default_editor: Option<PathBuf>,
     tabs: Vec<TabLayoutMetadata>,
 }
 
@@ -52,6 +58,100 @@ impl SessionLayoutMetadata {
                 }
             }
         }
+    }
+    pub fn list_clients_metadata(&self) -> String {
+        let mut clients_metadata: BTreeMap<ClientId, ClientMetadata> = BTreeMap::new();
+        for tab in &self.tabs {
+            let panes = if tab.hide_floating_panes {
+                &tab.tiled_panes
+            } else {
+                &tab.floating_panes
+            };
+            for pane in panes {
+                for focused_client in &pane.focused_clients {
+                    clients_metadata.insert(
+                        *focused_client,
+                        ClientMetadata {
+                            pane_id: pane.id.clone(),
+                            command: pane.run.clone(),
+                        },
+                    );
+                }
+            }
+        }
+
+        ClientMetadata::render_many(clients_metadata, &self.default_editor)
+    }
+    pub fn all_clients_metadata(&self) -> BTreeMap<ClientId, ClientMetadata> {
+        let mut clients_metadata: BTreeMap<ClientId, ClientMetadata> = BTreeMap::new();
+        for tab in &self.tabs {
+            let panes = if tab.hide_floating_panes {
+                &tab.tiled_panes
+            } else {
+                &tab.floating_panes
+            };
+            for pane in panes {
+                for focused_client in &pane.focused_clients {
+                    clients_metadata.insert(
+                        *focused_client,
+                        ClientMetadata {
+                            pane_id: pane.id.clone(),
+                            command: pane.run.clone(),
+                        },
+                    );
+                }
+            }
+        }
+        clients_metadata
+    }
+    pub fn is_dirty(&self) -> bool {
+        // here we check to see if the serialized layout would be different than the base one, and
+        // thus is "dirty". A layout is considered dirty if one of the following is true:
+        // 1. The current number of panes is different than the number of panes in the base layout
+        //    (meaning a pane was opened or closed)
+        // 2. One or more terminal panes are running a command that is not the default shell
+        let base_layout_pane_count = self.default_layout.pane_count();
+        let current_pane_count = self.pane_count();
+        if current_pane_count != base_layout_pane_count {
+            return true;
+        }
+        for tab in &self.tabs {
+            for tiled_pane in &tab.tiled_panes {
+                if let Some(Run::Command(run_command)) = tiled_pane.run.as_ref() {
+                    if !Self::is_default_shell(
+                        self.default_shell.as_ref(),
+                        &run_command.command.display().to_string(),
+                        &run_command.args,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+            for floating_pane in &tab.floating_panes {
+                if let Some(Run::Command(run_command)) = floating_pane.run.as_ref() {
+                    if !Self::is_default_shell(
+                        self.default_shell.as_ref(),
+                        &run_command.command.display().to_string(),
+                        &run_command.args,
+                    ) {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+    fn pane_count(&self) -> usize {
+        let mut pane_count = 0;
+        for tab in &self.tabs {
+            for _tiled_pane in &tab.tiled_panes {
+                pane_count += 1;
+            }
+            for _floating_pane in &tab.floating_panes {
+                pane_count += 1;
+            }
+        }
+        pane_count
     }
     fn is_default_shell(
         default_shell: Option<&PathBuf>,
@@ -178,7 +278,8 @@ impl SessionLayoutMetadata {
         let mut update_cmd_in_pane_metadata = |pane_layout_metadata: &mut PaneLayoutMetadata| {
             if let PaneId::Plugin(id) = pane_layout_metadata.id {
                 if let Some(run_plugin) = plugin_ids_to_run_plugins.remove(&id) {
-                    pane_layout_metadata.run = Some(Run::Plugin(run_plugin));
+                    pane_layout_metadata.run =
+                        Some(Run::Plugin(RunPluginOrAlias::RunPlugin(run_plugin)));
                 }
             }
         };
@@ -190,6 +291,19 @@ impl SessionLayoutMetadata {
                 update_cmd_in_pane_metadata(pane_layout_metadata);
             }
         }
+    }
+    pub fn update_default_editor(&mut self, default_editor: &Option<PathBuf>) {
+        let default_editor = default_editor.clone().unwrap_or_else(|| {
+            PathBuf::from(
+                std::env::var("EDITOR")
+                    .unwrap_or_else(|_| std::env::var("VISUAL").unwrap_or_else(|_| "vi".into())),
+            )
+        });
+        self.default_editor = Some(default_editor);
+    }
+    pub fn update_plugin_aliases_in_default_layout(&mut self, plugin_aliases: &PluginAliases) {
+        self.default_layout
+            .populate_plugin_aliases_in_layout(&plugin_aliases);
     }
 }
 
@@ -252,6 +366,7 @@ pub struct PaneLayoutMetadata {
     title: Option<String>,
     is_focused: bool,
     pane_contents: Option<String>,
+    focused_clients: Vec<ClientId>,
 }
 
 impl PaneLayoutMetadata {
@@ -263,6 +378,7 @@ impl PaneLayoutMetadata {
         title: Option<String>,
         is_focused: bool,
         pane_contents: Option<String>,
+        focused_clients: Vec<ClientId>,
     ) -> Self {
         PaneLayoutMetadata {
             id,
@@ -273,6 +389,65 @@ impl PaneLayoutMetadata {
             title,
             is_focused,
             pane_contents,
+            focused_clients,
         }
+    }
+}
+
+pub struct ClientMetadata {
+    pane_id: PaneId,
+    command: Option<Run>,
+}
+impl ClientMetadata {
+    pub fn stringify_pane_id(&self) -> String {
+        match self.pane_id {
+            PaneId::Terminal(terminal_id) => format!("terminal_{}", terminal_id),
+            PaneId::Plugin(plugin_id) => format!("plugin_{}", plugin_id),
+        }
+    }
+    pub fn stringify_command(&self, editor: &Option<PathBuf>) -> String {
+        let stringified = match &self.command {
+            Some(Run::Command(..)) => {
+                let (command, args) = extract_command_and_args(&self.command);
+                command.map(|c| format!("{} {}", c, args.join(" ")))
+            },
+            Some(Run::EditFile(..)) => {
+                let (file_to_edit, _line_number) = extract_edit_and_line_number(&self.command);
+                editor.as_ref().and_then(|editor| {
+                    file_to_edit
+                        .map(|file_to_edit| format!("{} {}", editor.display(), file_to_edit))
+                })
+            },
+            Some(Run::Plugin(..)) => {
+                let (plugin, _plugin_config) = extract_plugin_and_config(&self.command);
+                plugin.map(|p| format!("{}", p))
+            },
+            _ => None,
+        };
+        stringified.unwrap_or("N/A".to_owned())
+    }
+    pub fn get_pane_id(&self) -> PaneId {
+        self.pane_id
+    }
+    pub fn render_many(
+        clients_metadata: BTreeMap<ClientId, ClientMetadata>,
+        default_editor: &Option<PathBuf>,
+    ) -> String {
+        let mut lines = vec![];
+        lines.push(String::from("CLIENT_ID ZELLIJ_PANE_ID RUNNING_COMMAND"));
+
+        for (client_id, client_metadata) in clients_metadata.iter() {
+            // 9 - CLIENT_ID, 14 - ZELLIJ_PANE_ID, 15 - RUNNING_COMMAND
+            lines.push(format!(
+                "{} {} {}",
+                format!("{0: <9}", client_id),
+                format!("{0: <14}", client_metadata.stringify_pane_id()),
+                format!(
+                    "{0: <15}",
+                    client_metadata.stringify_command(default_editor)
+                )
+            ));
+        }
+        lines.join("\n")
     }
 }

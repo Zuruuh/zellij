@@ -97,17 +97,11 @@ pub(crate) fn get_resurrectable_sessions() -> Vec<(String, Duration, Layout)> {
                         .and_then(|metadata| metadata.created())
                     {
                         Ok(created) => Some(created),
-                        Err(e) => {
-                            log::error!(
-                                "Failed to read created stamp of resurrection file: {:?}",
-                                e
-                            );
-                            None
-                        },
+                        Err(_e) => None,
                     };
                     let layout = match Layout::from_kdl(
                         &raw_layout,
-                        layout_file_name.display().to_string(),
+                        Some(layout_file_name.display().to_string()),
                         None,
                         None,
                     ) {
@@ -126,6 +120,37 @@ pub(crate) fn get_resurrectable_sessions() -> Vec<(String, Duration, Layout)> {
                         .file_name()
                         .map(|f| std::path::PathBuf::from(f).display().to_string())?;
                     Some((session_name, elapsed_duration, layout))
+                })
+                .collect()
+        },
+        Err(e) => {
+            log::error!(
+                "Failed to read session_info cache folder: \"{:?}\": {:?}",
+                &*ZELLIJ_SESSION_INFO_CACHE_DIR,
+                e
+            );
+            vec![]
+        },
+    }
+}
+
+pub(crate) fn get_resurrectable_session_names() -> Vec<String> {
+    match fs::read_dir(&*ZELLIJ_SESSION_INFO_CACHE_DIR) {
+        Ok(files_in_session_info_folder) => {
+            let files_that_are_folders = files_in_session_info_folder
+                .filter_map(|f| f.ok().map(|f| f.path()))
+                .filter(|f| f.is_dir());
+            files_that_are_folders
+                .filter_map(|folder_name| {
+                    let folder = folder_name.display().to_string();
+                    let resurrection_layout_file = session_layout_cache_file_name(&folder);
+                    if std::path::Path::new(&resurrection_layout_file).exists() {
+                        folder_name
+                            .file_name()
+                            .map(|f| format!("{}", f.to_string_lossy()))
+                    } else {
+                        None
+                    }
                 })
                 .collect()
         },
@@ -190,10 +215,18 @@ pub(crate) fn print_sessions(
     mut sessions: Vec<(String, Duration, bool)>,
     no_formatting: bool,
     short: bool,
+    reverse: bool,
 ) {
     // (session_name, timestamp, is_dead)
     let curr_session = envs::get_session_name().unwrap_or_else(|_| "".into());
-    sessions.sort_by(|a, b| a.1.cmp(&b.1));
+    sessions.sort_by(|a, b| {
+        if reverse {
+            // sort by `Duration` ascending (newest would be first)
+            a.1.cmp(&b.1)
+        } else {
+            b.1.cmp(&a.1)
+        }
+    });
     sessions
         .iter()
         .for_each(|(session_name, timestamp, is_dead)| {
@@ -293,7 +326,7 @@ pub(crate) fn delete_session(name: &str, force: bool) {
     }
 }
 
-pub(crate) fn list_sessions(no_formatting: bool, short: bool) {
+pub(crate) fn list_sessions(no_formatting: bool, short: bool, reverse: bool) {
     let exit_code = match get_sessions() {
         Ok(running_sessions) => {
             let resurrectable_sessions = get_resurrectable_sessions();
@@ -317,6 +350,7 @@ pub(crate) fn list_sessions(no_formatting: bool, short: bool) {
                         .collect(),
                     no_formatting,
                     short,
+                    reverse,
                 );
                 0
             }
@@ -445,8 +479,8 @@ pub(crate) fn assert_session_ne(name: &str) {
 
     match session_exists(name) {
         Ok(result) if !result => {
-            let resurrectable_sessions = get_resurrectable_sessions();
-            if resurrectable_sessions.iter().find(|(s, _, _)| s == name).is_some() {
+            let resurrectable_sessions = get_resurrectable_session_names();
+            if resurrectable_sessions.iter().find(|s| s == &name).is_some() {
                 println!("Session with name {:?} already exists, but is dead. Use the attach command to resurrect it or, the delete-session command to kill it or specify a different name.", name);
             } else {
                 return

@@ -2,10 +2,10 @@
 use crate::consts::ASSET_MAP;
 use crate::input::theme::Themes;
 use crate::{
-    cli::{CliArgs, Command},
+    cli::{CliArgs, Command, SessionCommand, Sessions},
     consts::{
         FEATURES, SYSTEM_DEFAULT_CONFIG_DIR, SYSTEM_DEFAULT_DATA_DIR_PREFIX, VERSION,
-        ZELLIJ_DEFAULT_THEMES, ZELLIJ_PROJ_DIR,
+        ZELLIJ_CACHE_DIR, ZELLIJ_DEFAULT_THEMES, ZELLIJ_PROJ_DIR,
     },
     errors::prelude::*,
     home::*,
@@ -74,7 +74,8 @@ fn get_default_themes() -> Themes {
     let mut themes = Themes::default();
     for file in ZELLIJ_DEFAULT_THEMES.files() {
         if let Some(content) = file.contents_utf8() {
-            match Themes::from_string(&content.to_string()) {
+            let sourced_from_external_file = true;
+            match Themes::from_string(&content.to_string(), sourced_from_external_file) {
                 Ok(theme) => themes = themes.merge(theme),
                 Err(_) => {},
             }
@@ -167,6 +168,24 @@ pub const COMPACT_BAR_SWAP_LAYOUT: &[u8] = include_bytes!(concat!(
     "assets/layouts/compact.swap.kdl"
 ));
 
+pub const CLASSIC_LAYOUT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/",
+    "assets/layouts/classic.kdl"
+));
+
+pub const CLASSIC_SWAP_LAYOUT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/",
+    "assets/layouts/classic.swap.kdl"
+));
+
+pub const WELCOME_LAYOUT: &[u8] = include_bytes!(concat!(
+    env!("CARGO_MANIFEST_DIR"),
+    "/",
+    "assets/layouts/welcome.kdl"
+));
+
 pub const FISH_EXTRA_COMPLETION: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
     "/",
@@ -224,6 +243,7 @@ pub fn dump_specified_layout(layout: &str) -> std::io::Result<()> {
         "default" => dump_asset(DEFAULT_LAYOUT),
         "compact" => dump_asset(COMPACT_BAR_LAYOUT),
         "disable-status" => dump_asset(NO_STATUS_LAYOUT),
+        "classic" => dump_asset(CLASSIC_LAYOUT),
         custom => {
             info!("Dump {custom} layout");
             let custom = add_layout_ext(custom);
@@ -250,6 +270,7 @@ pub fn dump_specified_swap_layout(swap_layout: &str) -> std::io::Result<()> {
         "strider" => dump_asset(STRIDER_SWAP_LAYOUT),
         "default" => dump_asset(DEFAULT_SWAP_LAYOUT),
         "compact" => dump_asset(COMPACT_BAR_SWAP_LAYOUT),
+        "classic" => dump_asset(CLASSIC_SWAP_LAYOUT),
         not_found => Err(std::io::Error::new(
             std::io::ErrorKind::Other,
             format!("Swap Layout not found for: {}", not_found),
@@ -344,7 +365,9 @@ impl Setup {
     /// 2. layout options
     ///    (`layout.kdl` / `zellij --layout`)
     /// 3. config options (`config.kdl`)
-    pub fn from_cli_args(cli_args: &CliArgs) -> Result<(Config, Layout, Options), ConfigError> {
+    pub fn from_cli_args(
+        cli_args: &CliArgs,
+    ) -> Result<(Config, Layout, Options, Config, Options), ConfigError> {
         // note that this can potentially exit the process
         Setup::handle_setup_commands(cli_args);
         let config = Config::try_from(cli_args)?;
@@ -354,21 +377,39 @@ impl Setup {
             } else {
                 None
             };
+
+        // the attach CLI command can also have its own Options, we need to merge them if they
+        // exist
+        let cli_config_options = merge_attach_command_options(cli_config_options, &cli_args);
+
+        let mut config_without_layout = config.clone();
         let (layout, mut config) =
             Setup::parse_layout_and_override_config(cli_config_options.as_ref(), config, cli_args)?;
-        let config_options = match cli_config_options {
-            Some(cli_config_options) => config.options.merge(cli_config_options),
-            None => config.options.clone(),
-        };
 
-        config.themes = config.themes.merge(get_default_themes());
+        let config_options =
+            apply_themes_to_config(&mut config, cli_config_options.clone(), cli_args)?;
+        let config_options_without_layout =
+            apply_themes_to_config(&mut config_without_layout, cli_config_options, cli_args)?;
+        fn apply_themes_to_config(
+            config: &mut Config,
+            cli_config_options: Option<Options>,
+            cli_args: &CliArgs,
+        ) -> Result<Options, ConfigError> {
+            let config_options = match cli_config_options {
+                Some(cli_config_options) => config.options.merge(cli_config_options),
+                None => config.options.clone(),
+            };
 
-        let user_theme_dir = config_options.theme_dir.clone().or_else(|| {
-            get_theme_dir(cli_args.config_dir.clone().or_else(find_default_config_dir))
-                .filter(|dir| dir.exists())
-        });
-        if let Some(user_theme_dir) = user_theme_dir {
-            config.themes = config.themes.merge(Themes::from_dir(user_theme_dir)?);
+            config.themes = config.themes.merge(get_default_themes());
+
+            let user_theme_dir = config_options.theme_dir.clone().or_else(|| {
+                get_theme_dir(cli_args.config_dir.clone().or_else(find_default_config_dir))
+                    .filter(|dir| dir.exists())
+            });
+            if let Some(user_theme_dir) = user_theme_dir {
+                config.themes = config.themes.merge(Themes::from_dir(user_theme_dir)?);
+            }
+            Ok(config_options)
         }
 
         if let Some(Command::Setup(ref setup)) = &cli_args.command {
@@ -382,7 +423,13 @@ impl Setup {
                     |_| {},
                 );
         };
-        Ok((config, layout, config_options))
+        Ok((
+            config,
+            layout,
+            config_options,
+            config_without_layout,
+            config_options_without_layout,
+        ))
     }
 
     /// General setup helpers
@@ -505,6 +552,7 @@ impl Setup {
             )
             .unwrap();
         }
+        writeln!(&mut message, "[CACHE DIR]: {}", ZELLIJ_CACHE_DIR.display()).unwrap();
         writeln!(&mut message, "[DATA DIR]: {:?}", data_dir).unwrap();
         message.push_str(&format!("[PLUGIN DIR]: {:?}\n", plugin_dir));
         if !cfg!(feature = "disable_automatic_asset_installation") {
@@ -638,9 +686,23 @@ impl Setup {
                     .and_then(|cli_options| cli_options.default_layout.clone())
             })
             .or_else(|| config.options.default_layout.clone());
-        // we merge-override the config here because the layout might contain configuration
-        // that needs to take precedence
-        Layout::from_path_or_default(chosen_layout.as_ref(), layout_dir.clone(), config)
+        if let Some(layout_url) = chosen_layout
+            .as_ref()
+            .and_then(|l| l.to_str())
+            .and_then(|l| {
+                if l.starts_with("http://") || l.starts_with("https://") {
+                    Some(l)
+                } else {
+                    None
+                }
+            })
+        {
+            Layout::from_url(layout_url, config)
+        } else {
+            // we merge-override the config here because the layout might contain configuration
+            // that needs to take precedence
+            Layout::from_path_or_default(chosen_layout.as_ref(), layout_dir.clone(), config)
+        }
     }
     fn handle_setup_commands(cli_args: &CliArgs) {
         if let Some(Command::Setup(ref setup)) = &cli_args.command {
@@ -655,6 +717,28 @@ impl Setup {
     }
 }
 
+fn merge_attach_command_options(
+    cli_config_options: Option<Options>,
+    cli_args: &CliArgs,
+) -> Option<Options> {
+    let cli_config_options = if let Some(Command::Sessions(Sessions::Attach { options, .. })) =
+        cli_args.command.clone()
+    {
+        match options.clone().as_deref() {
+            Some(SessionCommand::Options(options)) => match cli_config_options {
+                Some(cli_config_options) => {
+                    Some(cli_config_options.merge_from_cli(options.to_owned().into()))
+                },
+                None => Some(options.to_owned().into()),
+            },
+            _ => cli_config_options,
+        }
+    } else {
+        cli_config_options
+    };
+    cli_config_options
+}
+
 #[cfg(test)]
 mod setup_test {
     use super::Setup;
@@ -666,7 +750,7 @@ mod setup_test {
     #[test]
     fn default_config_with_no_cli_arguments() {
         let cli_args = CliArgs::default();
-        let (config, layout, options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (config, layout, options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", config));
         assert_snapshot!(format!("{:#?}", layout));
         assert_snapshot!(format!("{:#?}", options));
@@ -681,7 +765,7 @@ mod setup_test {
             },
             ..Default::default()
         }));
-        let (_config, _layout, options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (_config, _layout, options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", options));
     }
     #[test]
@@ -691,7 +775,7 @@ mod setup_test {
             "{}/src/test-fixtures/layout-with-options.kdl",
             env!("CARGO_MANIFEST_DIR")
         )));
-        let (_config, layout, options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (_config, layout, options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", options));
         assert_snapshot!(format!("{:#?}", layout));
     }
@@ -709,7 +793,7 @@ mod setup_test {
             },
             ..Default::default()
         }));
-        let (_config, layout, options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (_config, layout, options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", options));
         assert_snapshot!(format!("{:#?}", layout));
     }
@@ -724,7 +808,7 @@ mod setup_test {
             "{}/src/test-fixtures/layout-with-env-vars.kdl",
             env!("CARGO_MANIFEST_DIR")
         )));
-        let (config, _layout, _options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (config, _layout, _options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", config));
     }
     #[test]
@@ -738,21 +822,7 @@ mod setup_test {
             "{}/src/test-fixtures/layout-with-ui-config.kdl",
             env!("CARGO_MANIFEST_DIR")
         )));
-        let (config, _layout, _options) = Setup::from_cli_args(&cli_args).unwrap();
-        assert_snapshot!(format!("{:#?}", config));
-    }
-    #[test]
-    fn layout_plugins_override_config_plugins() {
-        let mut cli_args = CliArgs::default();
-        cli_args.config = Some(PathBuf::from(format!(
-            "{}/src/test-fixtures/config-with-plugins-config.kdl",
-            env!("CARGO_MANIFEST_DIR")
-        )));
-        cli_args.layout = Some(PathBuf::from(format!(
-            "{}/src/test-fixtures/layout-with-plugins-config.kdl",
-            env!("CARGO_MANIFEST_DIR")
-        )));
-        let (config, _layout, _options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (config, _layout, _options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", config));
     }
     #[test]
@@ -766,7 +836,7 @@ mod setup_test {
             "{}/src/test-fixtures/layout-with-themes-config.kdl",
             env!("CARGO_MANIFEST_DIR")
         )));
-        let (config, _layout, _options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (config, _layout, _options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", config));
     }
     #[test]
@@ -780,7 +850,7 @@ mod setup_test {
             "{}/src/test-fixtures/layout-with-keybindings-config.kdl",
             env!("CARGO_MANIFEST_DIR")
         )));
-        let (config, _layout, _options) = Setup::from_cli_args(&cli_args).unwrap();
+        let (config, _layout, _options, _, _) = Setup::from_cli_args(&cli_args).unwrap();
         assert_snapshot!(format!("{:#?}", config));
     }
 }

@@ -11,7 +11,7 @@ pub struct Event {
     pub name: i32,
     #[prost(
         oneof = "event::Payload",
-        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15"
+        tags = "2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25"
     )]
     pub payload: ::core::option::Option<event::Payload>,
 }
@@ -48,7 +48,122 @@ pub mod event {
         RunCommandResultPayload(super::RunCommandResultPayload),
         #[prost(message, tag = "15")]
         WebRequestResultPayload(super::WebRequestResultPayload),
+        #[prost(message, tag = "16")]
+        CommandPaneOpenedPayload(super::CommandPaneOpenedPayload),
+        #[prost(message, tag = "17")]
+        CommandPaneExitedPayload(super::CommandPaneExitedPayload),
+        #[prost(message, tag = "18")]
+        PaneClosedPayload(super::PaneClosedPayload),
+        #[prost(message, tag = "19")]
+        EditPaneOpenedPayload(super::EditPaneOpenedPayload),
+        #[prost(message, tag = "20")]
+        EditPaneExitedPayload(super::EditPaneExitedPayload),
+        #[prost(message, tag = "21")]
+        CommandPaneRerunPayload(super::CommandPaneReRunPayload),
+        #[prost(message, tag = "22")]
+        FailedToWriteConfigToDiskPayload(super::FailedToWriteConfigToDiskPayload),
+        #[prost(message, tag = "23")]
+        ListClientsPayload(super::ListClientsPayload),
+        #[prost(message, tag = "24")]
+        HostFolderChangedPayload(super::HostFolderChangedPayload),
+        #[prost(message, tag = "25")]
+        FailedToChangeHostFolderPayload(super::FailedToChangeHostFolderPayload),
     }
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FailedToChangeHostFolderPayload {
+    #[prost(string, optional, tag = "1")]
+    pub error_message: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct HostFolderChangedPayload {
+    #[prost(string, tag = "1")]
+    pub new_host_folder_path: ::prost::alloc::string::String,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ListClientsPayload {
+    #[prost(message, repeated, tag = "1")]
+    pub client_info: ::prost::alloc::vec::Vec<ClientInfo>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct ClientInfo {
+    #[prost(uint32, tag = "1")]
+    pub client_id: u32,
+    #[prost(message, optional, tag = "2")]
+    pub pane_id: ::core::option::Option<PaneId>,
+    #[prost(string, tag = "3")]
+    pub running_command: ::prost::alloc::string::String,
+    #[prost(bool, tag = "4")]
+    pub is_current_client: bool,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FailedToWriteConfigToDiskPayload {
+    #[prost(string, optional, tag = "1")]
+    pub file_path: ::core::option::Option<::prost::alloc::string::String>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommandPaneReRunPayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+    #[prost(message, repeated, tag = "3")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PaneClosedPayload {
+    #[prost(message, optional, tag = "1")]
+    pub pane_id: ::core::option::Option<PaneId>,
+}
+/// duplicate of plugin_command.PaneId because protobuffs don't like recursive imports
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PaneId {
+    #[prost(enumeration = "PaneType", tag = "1")]
+    pub pane_type: i32,
+    #[prost(uint32, tag = "2")]
+    pub id: u32,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommandPaneOpenedPayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EditPaneOpenedPayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+    #[prost(message, repeated, tag = "2")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct CommandPaneExitedPayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+    #[prost(int32, optional, tag = "2")]
+    pub exit_code: ::core::option::Option<i32>,
+    #[prost(message, repeated, tag = "3")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct EditPaneExitedPayload {
+    #[prost(uint32, tag = "1")]
+    pub terminal_pane_id: u32,
+    #[prost(int32, optional, tag = "2")]
+    pub exit_code: ::core::option::Option<i32>,
+    #[prost(message, repeated, tag = "3")]
+    pub context: ::prost::alloc::vec::Vec<ContextItem>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -109,6 +224,23 @@ pub struct PermissionRequestResultPayload {
 pub struct FileListPayload {
     #[prost(string, repeated, tag = "1")]
     pub paths: ::prost::alloc::vec::Vec<::prost::alloc::string::String>,
+    #[prost(message, repeated, tag = "2")]
+    pub paths_metadata: ::prost::alloc::vec::Vec<FileMetadata>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct FileMetadata {
+    /// if this is false, the metadata for this file has not been read
+    #[prost(bool, tag = "1")]
+    pub metadata_is_set: bool,
+    #[prost(bool, tag = "2")]
+    pub is_dir: bool,
+    #[prost(bool, tag = "3")]
+    pub is_file: bool,
+    #[prost(bool, tag = "4")]
+    pub is_symlink: bool,
+    #[prost(uint64, tag = "5")]
+    pub len: u64,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -172,6 +304,28 @@ pub struct SessionManifest {
     pub connected_clients: u32,
     #[prost(bool, tag = "5")]
     pub is_current_session: bool,
+    #[prost(message, repeated, tag = "6")]
+    pub available_layouts: ::prost::alloc::vec::Vec<LayoutInfo>,
+    #[prost(message, repeated, tag = "7")]
+    pub plugins: ::prost::alloc::vec::Vec<PluginInfo>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct PluginInfo {
+    #[prost(uint32, tag = "1")]
+    pub plugin_id: u32,
+    #[prost(string, tag = "2")]
+    pub plugin_url: ::prost::alloc::string::String,
+    #[prost(message, repeated, tag = "3")]
+    pub plugin_config: ::prost::alloc::vec::Vec<ContextItem>,
+}
+#[allow(clippy::derive_partial_eq_without_eq)]
+#[derive(Clone, PartialEq, ::prost::Message)]
+pub struct LayoutInfo {
+    #[prost(string, tag = "1")]
+    pub name: ::prost::alloc::string::String,
+    #[prost(string, tag = "2")]
+    pub source: ::prost::alloc::string::String,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -266,6 +420,8 @@ pub struct ModeUpdatePayload {
     pub arrow_fonts_support: bool,
     #[prost(string, optional, tag = "5")]
     pub session_name: ::core::option::Option<::prost::alloc::string::String>,
+    #[prost(enumeration = "super::input_mode::InputMode", optional, tag = "6")]
+    pub base_mode: ::core::option::Option<i32>,
 }
 #[allow(clippy::derive_partial_eq_without_eq)]
 #[derive(Clone, PartialEq, ::prost::Message)]
@@ -320,6 +476,16 @@ pub enum EventType {
     SessionUpdate = 16,
     RunCommandResult = 17,
     WebRequestResult = 18,
+    CommandPaneOpened = 19,
+    CommandPaneExited = 20,
+    PaneClosed = 21,
+    EditPaneOpened = 22,
+    EditPaneExited = 23,
+    CommandPaneReRun = 24,
+    FailedToWriteConfigToDisk = 25,
+    ListClients = 26,
+    HostFolderChanged = 27,
+    FailedToChangeHostFolder = 28,
 }
 impl EventType {
     /// String value of the enum field names used in the ProtoBuf definition.
@@ -347,6 +513,16 @@ impl EventType {
             EventType::SessionUpdate => "SessionUpdate",
             EventType::RunCommandResult => "RunCommandResult",
             EventType::WebRequestResult => "WebRequestResult",
+            EventType::CommandPaneOpened => "CommandPaneOpened",
+            EventType::CommandPaneExited => "CommandPaneExited",
+            EventType::PaneClosed => "PaneClosed",
+            EventType::EditPaneOpened => "EditPaneOpened",
+            EventType::EditPaneExited => "EditPaneExited",
+            EventType::CommandPaneReRun => "CommandPaneReRun",
+            EventType::FailedToWriteConfigToDisk => "FailedToWriteConfigToDisk",
+            EventType::ListClients => "ListClients",
+            EventType::HostFolderChanged => "HostFolderChanged",
+            EventType::FailedToChangeHostFolder => "FailedToChangeHostFolder",
         }
     }
     /// Creates an enum from field names used in the ProtoBuf definition.
@@ -371,6 +547,43 @@ impl EventType {
             "SessionUpdate" => Some(Self::SessionUpdate),
             "RunCommandResult" => Some(Self::RunCommandResult),
             "WebRequestResult" => Some(Self::WebRequestResult),
+            "CommandPaneOpened" => Some(Self::CommandPaneOpened),
+            "CommandPaneExited" => Some(Self::CommandPaneExited),
+            "PaneClosed" => Some(Self::PaneClosed),
+            "EditPaneOpened" => Some(Self::EditPaneOpened),
+            "EditPaneExited" => Some(Self::EditPaneExited),
+            "CommandPaneReRun" => Some(Self::CommandPaneReRun),
+            "FailedToWriteConfigToDisk" => Some(Self::FailedToWriteConfigToDisk),
+            "ListClients" => Some(Self::ListClients),
+            "HostFolderChanged" => Some(Self::HostFolderChanged),
+            "FailedToChangeHostFolder" => Some(Self::FailedToChangeHostFolder),
+            _ => None,
+        }
+    }
+}
+/// duplicate of plugin_command.PaneType because protobuffs don't like recursive imports
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord, ::prost::Enumeration)]
+#[repr(i32)]
+pub enum PaneType {
+    Terminal = 0,
+    Plugin = 1,
+}
+impl PaneType {
+    /// String value of the enum field names used in the ProtoBuf definition.
+    ///
+    /// The values are not transformed in any way and thus are considered stable
+    /// (if the ProtoBuf definition does not change) and safe for programmatic use.
+    pub fn as_str_name(&self) -> &'static str {
+        match self {
+            PaneType::Terminal => "Terminal",
+            PaneType::Plugin => "Plugin",
+        }
+    }
+    /// Creates an enum from field names used in the ProtoBuf definition.
+    pub fn from_str_name(value: &str) -> ::core::option::Option<Self> {
+        match value {
+            "Terminal" => Some(Self::Terminal),
+            "Plugin" => Some(Self::Plugin),
             _ => None,
         }
     }
